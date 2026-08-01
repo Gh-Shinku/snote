@@ -31,12 +31,6 @@
         "scopeName": "source.snote",
         "path": "./syntaxes/snote.tmLanguage.json"
       }
-    ],
-    "snippets": [
-      {
-        "language": "snote",
-        "path": "./snippets/snote.json"
-      }
     ]
   },
   "scripts": {
