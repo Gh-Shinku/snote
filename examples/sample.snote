@@ -1,0 +1,12 @@
+call project:
+    call task one:
+        call what can i say:
+
+        ret
+
+    ret
+    call task two:
+        call detail:
+        ret
+    ret
+ret

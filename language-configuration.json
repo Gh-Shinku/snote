@@ -1,0 +1,8 @@
+{
+  "comments": {},
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*call\\b.*:\\s*$",
+    "decreaseIndentPattern": "^\\s*ret\\s*$"
+  },
+  "wordPattern": "[^\\s:]+"
+}

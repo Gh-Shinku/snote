@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SNote",
+  "scopeName": "source.snote",
+  "patterns": [
+    {
+      "include": "#call"
+    },
+    {
+      "include": "#ret"
+    }
+  ],
+  "repository": {
+    "call": {
+      "name": "meta.call.snote",
+      "match": "^(\\s*)(call)(\\s+)(.*)(:)\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.call.snote"
+        },
+        "4": {
+          "name": "string.unquoted.title.snote"
+        },
+        "5": {
+          "name": "punctuation.definition.block.snote"
+        }
+      }
+    },
+    "ret": {
+      "name": "meta.ret.snote",
+      "match": "^\\s*(ret)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.ret.snote"
+        }
+      }
+    }
+  }
+}

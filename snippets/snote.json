@@ -1,0 +1,11 @@
+{
+  "Call block": {
+    "prefix": "call",
+    "body": [
+      "call ${1:title}:",
+      "\t${0}",
+      "ret"
+    ],
+    "description": "Insert a call/ret block"
+  }
+}
