@@ -19,6 +19,7 @@ The language is a hierarchy of `call <title>:` and `ret` pairs.
 - Folding for matched `call` / `ret` blocks
 - Whole-document formatting using the editor indentation settings
 - A basic `call` block snippet
+- Auto-complete `- [ ]` TODO items: type `-` (or `- `) at the start of a line and accept the **TODO item** suggestion
 
 ## Build
 

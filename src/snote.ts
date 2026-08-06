@@ -23,6 +23,7 @@ export interface FormatResult {
 
 const callPattern = /^call\s+.+:\s*$/;
 const retPattern = /^ret\s*$/;
+const todoPrefixPattern = /^(\s*)(-\s*)$/;
 
 export function parseLine(raw: string, index: number): ParsedLine {
   const trimmed = raw.trim();
@@ -36,6 +37,21 @@ export function parseLine(raw: string, index: number): ParsedLine {
   }
 
   return { index, raw, trimmed, kind: 'other' };
+}
+
+export interface TodoCompletion {
+  readonly start: number;
+  readonly insertText: string;
+}
+
+export function getTodoCompletion(linePrefix: string): TodoCompletion | undefined {
+  const match = todoPrefixPattern.exec(linePrefix);
+
+  if (!match) {
+    return undefined;
+  }
+
+  return { start: 0, insertText: `${match[1]}- [ ] ` };
 }
 
 export function parseDocument(text: string): ParsedLine[] {

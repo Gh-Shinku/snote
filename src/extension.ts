@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatDocument, getFoldingRanges } from './snote';
+import { formatDocument, getFoldingRanges, getTodoCompletion } from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
 
@@ -7,7 +7,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
-    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c')
+    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ')
   );
 }
 
@@ -50,24 +50,60 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
     document: vscode.TextDocument,
     position: vscode.Position
   ): vscode.ProviderResult<vscode.CompletionItem[]> {
-    const range = getCurrentWordRange(document, position);
-    const prefix = document.getText(range);
+    const items: vscode.CompletionItem[] = [];
 
-    if (prefix.length > 0 && !'call'.startsWith(prefix)) {
-      return [];
+    const callItem = getCallCompletion(document, position);
+    if (callItem !== undefined) {
+      items.push(callItem);
     }
 
-    const item = new vscode.CompletionItem('call block', vscode.CompletionItemKind.Snippet);
-    item.detail = 'SNote call/ret block';
-    item.documentation = 'Insert a nested SNote call block.';
-    item.filterText = 'call';
-    item.insertText = new vscode.SnippetString('call ${1:title}:\n\t${0}\nret');
-    item.preselect = true;
-    item.range = range;
-    item.sortText = '0000';
+    const todoItem = getTodoCompletionItem(document, position);
+    if (todoItem !== undefined) {
+      items.push(todoItem);
+    }
 
-    return [item];
+    return items;
   }
+}
+
+function getCallCompletion(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {
+  const range = getCurrentWordRange(document, position);
+  const prefix = document.getText(range);
+
+  if (prefix.length === 0 || !'call'.startsWith(prefix)) {
+    return undefined;
+  }
+
+  const item = new vscode.CompletionItem('call block', vscode.CompletionItemKind.Snippet);
+  item.detail = 'SNote call/ret block';
+  item.documentation = 'Insert a nested SNote call block.';
+  item.filterText = 'call';
+  item.insertText = new vscode.SnippetString('call ${1:title}:\n\t${0}\nret');
+  item.preselect = true;
+  item.range = range;
+  item.sortText = '0000';
+
+  return item;
+}
+
+function getTodoCompletionItem(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {
+  const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
+  const completion = getTodoCompletion(linePrefix);
+
+  if (completion === undefined) {
+    return undefined;
+  }
+
+  const item = new vscode.CompletionItem('TODO item', vscode.CompletionItemKind.Snippet);
+  item.detail = 'SNote TODO item';
+  item.documentation = 'Insert a `- [ ]` TODO item.';
+  item.filterText = '-';
+  item.insertText = completion.insertText;
+  item.preselect = true;
+  item.range = new vscode.Range(position.line, completion.start, position.line, position.character);
+  item.sortText = '0001';
+
+  return item;
 }
 
 function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDocument, getFoldingRanges, isBalanced, parseLine } from '../src/snote';
+import { formatDocument, getFoldingRanges, getTodoCompletion, isBalanced, parseLine } from '../src/snote';
 
 test('parseLine identifies call, ret, and other lines', () => {
   assert.equal(parseLine('  call project title:', 0).kind, 'call');
@@ -53,6 +53,21 @@ test('isBalanced detects balanced and unbalanced documents', () => {
   assert.equal(isBalanced('call x:\nret'), true);
   assert.equal(isBalanced('call x:'), false);
   assert.equal(isBalanced('ret'), false);
+});
+
+test('getTodoCompletion completes a dash at line start', () => {
+  assert.deepEqual(getTodoCompletion('-'), { start: 0, insertText: '- [ ] ' });
+  assert.deepEqual(getTodoCompletion('- '), { start: 0, insertText: '- [ ] ' });
+  assert.deepEqual(getTodoCompletion('  - '), { start: 0, insertText: '  - [ ] ' });
+});
+
+test('getTodoCompletion returns undefined outside todo context', () => {
+  assert.equal(getTodoCompletion(''), undefined);
+  assert.equal(getTodoCompletion(' '), undefined);
+  assert.equal(getTodoCompletion('plain note'), undefined);
+  assert.equal(getTodoCompletion('-x'), undefined);
+  assert.equal(getTodoCompletion('- [ ] done'), undefined);
+  assert.equal(getTodoCompletion('call task:'), undefined);
 });
 
 test('formatDocument canonicalizes indentation with spaces', () => {
