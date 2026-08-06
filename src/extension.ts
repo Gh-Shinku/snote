@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { formatDocument, getFoldingRanges, getTodoCompletion } from './snote';
+import { DocumentSymbol, formatDocument, getDocumentSymbols, getFoldingRanges, getTodoCompletion, toggleTodoLine } from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
 
@@ -7,7 +7,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
-    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ')
+    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' '),
+    vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
+    vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor)
   );
 }
 
@@ -104,6 +106,40 @@ function getTodoCompletionItem(document: vscode.TextDocument, position: vscode.P
   item.sortText = '0001';
 
   return item;
+}
+
+class SnoteDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
+  provideDocumentSymbols(document: vscode.TextDocument): vscode.ProviderResult<vscode.DocumentSymbol[]> {
+    return getDocumentSymbols(document.getText()).map((symbol) => toVscodeSymbol(symbol, document));
+  }
+}
+
+function toVscodeSymbol(symbol: DocumentSymbol, document: vscode.TextDocument): vscode.DocumentSymbol {
+  const range = new vscode.Range(symbol.start, 0, symbol.end, document.lineAt(symbol.end).text.length);
+  const selectionRange = new vscode.Range(symbol.start, 0, symbol.start, document.lineAt(symbol.start).text.length);
+
+  const result = new vscode.DocumentSymbol(symbol.name, '', vscode.SymbolKind.Namespace, range, selectionRange);
+  result.children = symbol.children.map((child) => toVscodeSymbol(child, document));
+  return result;
+}
+
+function toggleTodoInEditor(editor: vscode.TextEditor): void {
+  const edit = new vscode.WorkspaceEdit();
+  const handledLines = new Set<number>();
+
+  for (const selection of editor.selections) {
+    const line = editor.document.lineAt(selection.start.line);
+    const toggled = toggleTodoLine(line.text);
+
+    if (toggled !== undefined && !handledLines.has(line.lineNumber)) {
+      handledLines.add(line.lineNumber);
+      edit.replace(editor.document.uri, line.range, toggled);
+    }
+  }
+
+  if (handledLines.size > 0) {
+    void vscode.workspace.applyEdit(edit);
+  }
 }
 
 function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range {

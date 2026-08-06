@@ -4,6 +4,9 @@
   "scopeName": "source.snote",
   "patterns": [
     {
+      "include": "#todo"
+    },
+    {
       "include": "#call"
     },
     {
@@ -11,6 +14,28 @@
     }
   ],
   "repository": {
+    "todo": {
+      "patterns": [
+        {
+          "name": "meta.todo.unchecked.snote",
+          "match": "^(\\s*)(-\\s+)(\\[ \\])(.*)$",
+          "captures": {
+            "3": {
+              "name": "punctuation.definition.todo.unchecked.snote"
+            }
+          }
+        },
+        {
+          "name": "meta.todo.checked.snote",
+          "match": "^(\\s*)(-\\s+)(\\[[xX]\\])(.*)$",
+          "captures": {
+            "3": {
+              "name": "punctuation.definition.todo.checked.snote"
+            }
+          }
+        }
+      ]
+    },
     "call": {
       "name": "meta.call.snote",
       "match": "^(\\s*)(call)(\\s+)(.*)(:)\\s*$",

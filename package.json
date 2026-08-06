@@ -12,6 +12,19 @@
   ],
   "main": "./out/src/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "snote.toggleTodo",
+        "title": "SNote: Toggle TODO item"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "snote.toggleTodo",
+        "key": "alt+enter",
+        "when": "editorTextFocus && editorLangId == snote"
+      }
+    ],
     "languages": [
       {
         "id": "snote",

@@ -20,6 +20,8 @@ The language is a hierarchy of `call <title>:` and `ret` pairs.
 - Whole-document formatting using the editor indentation settings
 - A basic `call` block snippet
 - Auto-complete `- [ ]` TODO items: type `-` (or `- `) at the start of a line and accept the **TODO item** suggestion
+- Toggle `- [ ]` / `- [x]` with `Alt+Enter` (command: **SNote: Toggle TODO item**)
+- Outline view and breadcrumbs showing the `call` block hierarchy
 
 ## Build
 

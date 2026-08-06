@@ -24,6 +24,7 @@ export interface FormatResult {
 const callPattern = /^call\s+.+:\s*$/;
 const retPattern = /^ret\s*$/;
 const todoPrefixPattern = /^(\s*)(-\s*)$/;
+const todoItemPattern = /^(\s*-\s+)\[([ xX])\](.*)$/;
 
 export function parseLine(raw: string, index: number): ParsedLine {
   const trimmed = raw.trim();
@@ -52,6 +53,72 @@ export function getTodoCompletion(linePrefix: string): TodoCompletion | undefine
   }
 
   return { start: 0, insertText: `${match[1]}- [ ] ` };
+}
+
+export function toggleTodoLine(raw: string): string | undefined {
+  const match = todoItemPattern.exec(raw);
+
+  if (!match) {
+    return undefined;
+  }
+
+  const [, prefix, box, rest] = match;
+  const checked = box === 'x' || box === 'X';
+  return `${prefix}[${checked ? ' ' : 'x'}]${rest}`;
+}
+
+export interface DocumentSymbol {
+  readonly name: string;
+  readonly start: number;
+  readonly end: number;
+  readonly children: DocumentSymbol[];
+}
+
+interface SymbolNode {
+  name: string;
+  start: number;
+  end: number;
+  children: SymbolNode[];
+}
+
+export function getDocumentSymbols(text: string): DocumentSymbol[] {
+  const symbols: SymbolNode[] = [];
+  const stack: SymbolNode[] = [];
+  const lines = parseDocument(text);
+
+  for (const line of lines) {
+    if (line.kind === 'call') {
+      const symbol: SymbolNode = {
+        name: line.trimmed.replace(/^call\s+/, '').replace(/:\s*$/, ''),
+        start: line.index,
+        end: line.index,
+        children: []
+      };
+
+      if (stack.length > 0) {
+        stack[stack.length - 1].children.push(symbol);
+      } else {
+        symbols.push(symbol);
+      }
+
+      stack.push(symbol);
+      continue;
+    }
+
+    if (line.kind === 'ret') {
+      const symbol = stack.pop();
+      if (symbol !== undefined) {
+        symbol.end = line.index;
+      }
+    }
+  }
+
+  const lastIndex = lines.length - 1;
+  for (const symbol of stack) {
+    symbol.end = lastIndex;
+  }
+
+  return symbols;
 }
 
 export function parseDocument(text: string): ParsedLine[] {

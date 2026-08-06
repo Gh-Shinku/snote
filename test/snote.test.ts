@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDocument, getFoldingRanges, getTodoCompletion, isBalanced, parseLine } from '../src/snote';
+import { formatDocument, getDocumentSymbols, getFoldingRanges, getTodoCompletion, isBalanced, parseLine, toggleTodoLine } from '../src/snote';
 
 test('parseLine identifies call, ret, and other lines', () => {
   assert.equal(parseLine('  call project title:', 0).kind, 'call');
@@ -68,6 +68,56 @@ test('getTodoCompletion returns undefined outside todo context', () => {
   assert.equal(getTodoCompletion('-x'), undefined);
   assert.equal(getTodoCompletion('- [ ] done'), undefined);
   assert.equal(getTodoCompletion('call task:'), undefined);
+});
+
+test('toggleTodoLine toggles unchecked and checked items', () => {
+  assert.equal(toggleTodoLine('- [ ] write tests'), '- [x] write tests');
+  assert.equal(toggleTodoLine('  - [x] done'), '  - [ ] done');
+  assert.equal(toggleTodoLine('- [X] done'), '- [ ] done');
+});
+
+test('toggleTodoLine returns undefined for non-todo lines', () => {
+  assert.equal(toggleTodoLine('- [] empty'), undefined);
+  assert.equal(toggleTodoLine('plain note'), undefined);
+  assert.equal(toggleTodoLine('call task:'), undefined);
+});
+
+test('getDocumentSymbols builds a nested tree', () => {
+  const text = [
+    'call outer:',
+    '  call inner:',
+    '  ret',
+    'ret'
+  ].join('\n');
+
+  const symbols = getDocumentSymbols(text);
+  assert.equal(symbols.length, 1);
+  assert.equal(symbols[0].name, 'outer');
+  assert.equal(symbols[0].start, 0);
+  assert.equal(symbols[0].end, 3);
+  assert.equal(symbols[0].children.length, 1);
+  assert.equal(symbols[0].children[0].name, 'inner');
+  assert.equal(symbols[0].children[0].start, 1);
+  assert.equal(symbols[0].children[0].end, 2);
+});
+
+test('getDocumentSymbols handles siblings and unclosed blocks', () => {
+  const text = [
+    'call one:',
+    'ret',
+    'call two:',
+    '  call nested:',
+    '  ret'
+  ].join('\n');
+
+  const symbols = getDocumentSymbols(text);
+  assert.equal(symbols.length, 2);
+  assert.deepEqual(symbols.map((s) => s.name), ['one', 'two']);
+  assert.equal(symbols[0].end, 1);
+  assert.equal(symbols[1].end, 4);
+  assert.equal(symbols[1].children.length, 1);
+  assert.equal(symbols[1].children[0].name, 'nested');
+  assert.equal(symbols[1].children[0].end, 4);
 });
 
 test('formatDocument canonicalizes indentation with spaces', () => {
