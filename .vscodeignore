@@ -1,0 +1,13 @@
+.github/**
+.vscode/**
+dist/**
+editors/**
+examples/**
+src/**
+test/**
+.gitignore
+AGENTS.md
+tsconfig.json
+*.vsix
+out/**/*.map
+out/test/**

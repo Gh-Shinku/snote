@@ -49,7 +49,7 @@ npm run compile
 Create a `.vsix` extension package:
 
 ```bash
-npx @vscode/vsce package
+npm run package
 ```
 
 This creates a file like:
@@ -70,3 +70,31 @@ Or install it from VS Code:
 2. Click `...`.
 3. Choose `Install from VSIX...`.
 4. Select the generated `.vsix` file.
+
+## Release
+
+GitHub Actions publishes a GitHub Release when a tag is pushed.
+
+The tag must match this format:
+
+```text
+<package.name>-<package.version>
+```
+
+For the current package, that is:
+
+```text
+snote-0.0.1
+```
+
+Release flow:
+
+```bash
+npm test
+git tag snote-0.0.1
+git push origin snote-0.0.1
+```
+
+The workflow validates the tag against `package.json`, packages the extension as
+`dist/snote-0.0.1.vsix`, creates a GitHub Release named `snote-0.0.1`, and uploads
+the VSIX asset.

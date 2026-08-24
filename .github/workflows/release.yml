@@ -1,0 +1,62 @@
+name: Release VS Code Extension
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and release VSIX
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate tag
+        id: package
+        shell: bash
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          release_name="${name}-${version}"
+
+          if [ "${GITHUB_REF_NAME}" != "${release_name}" ]; then
+            echo "::error::Expected tag '${release_name}', got '${GITHUB_REF_NAME}'."
+            exit 1
+          fi
+
+          echo "name=${name}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "release_name=${release_name}" >> "${GITHUB_OUTPUT}"
+          echo "vsix=dist/${release_name}.vsix" >> "${GITHUB_OUTPUT}"
+
+      - name: Test
+        run: npm test
+
+      - name: Package VSIX
+        run: |
+          mkdir -p dist
+          npm run package -- --out "${{ steps.package.outputs.vsix }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.package.outputs.release_name }}" \
+            "${{ steps.package.outputs.vsix }}" \
+            --title "${{ steps.package.outputs.release_name }}" \
+            --verify-tag

@@ -4,6 +4,10 @@
   "description": "Language support for hierarchical realtime persistent notes.",
   "version": "0.0.1",
   "publisher": "local",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gh-Shinku/snote.git"
+  },
   "engines": {
     "vscode": "^1.92.0"
   },
@@ -48,12 +52,14 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
+    "package": "vsce package",
     "watch": "tsc -watch -p ./",
     "test": "npm run compile && node --test out/test/snote.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.92.0",
+    "@vscode/vsce": "^3.9.2",
     "typescript": "^5.8.2"
   }
 }
