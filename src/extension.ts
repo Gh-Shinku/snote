@@ -2,16 +2,17 @@ import * as vscode from 'vscode';
 import {
   DocumentSymbol,
   RichTextKind,
-  formatDocument,
   getDocumentSymbols,
+  getFormatLineEdits,
   getFoldingRanges,
-  getRichTextSpans,
+  getRichTextSpansForLines,
   getTodoCompletion,
   toggleTodoLine
 } from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
 const richTextKinds: RichTextKind[] = ['bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
+const richTextRefreshDelayMs = 150;
 
 export function activate(context: vscode.ExtensionContext): void {
   const richTextDecorations = createRichTextDecorationTypes();
@@ -20,16 +21,17 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
-    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' '),
+    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`'),
     vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
     vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor),
     vscode.window.onDidChangeVisibleTextEditors((editors) => richTextDecorationManager.updateEditors(editors)),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor !== undefined) {
-        richTextDecorationManager.updateEditor(editor);
+        richTextDecorationManager.updateEditors([editor]);
       }
     }),
     vscode.workspace.onDidChangeTextDocument((event) => richTextDecorationManager.updateDocument(event.document)),
+    richTextDecorationManager,
     ...Object.values(richTextDecorations)
   );
 
@@ -51,22 +53,21 @@ class SnoteDocumentFormattingProvider implements vscode.DocumentFormattingEditPr
     document: vscode.TextDocument,
     options: vscode.FormattingOptions
   ): vscode.ProviderResult<vscode.TextEdit[]> {
-    const result = formatDocument(document.getText(), {
-      tabSize: options.tabSize,
-      insertSpaces: options.insertSpaces
-    });
+    try {
+      const edits = getFormatLineEdits(document.getText(), {
+        tabSize: options.tabSize,
+        insertSpaces: options.insertSpaces
+      });
 
-    if (!result) {
-      void vscode.window.showWarningMessage('SNote format skipped: unbalanced call/ret pairs.');
+      if (!edits || edits.length === 0) {
+        return [];
+      }
+
+      return edits.map((edit) => vscode.TextEdit.replace(document.lineAt(edit.line).range, edit.text));
+    } catch (error) {
+      console.error('SNote formatter failed.', error);
       return [];
     }
-
-    const fullRange = new vscode.Range(
-      document.positionAt(0),
-      document.positionAt(document.getText().length)
-    );
-
-    return [vscode.TextEdit.replace(fullRange, result.text)];
   }
 }
 
@@ -85,6 +86,11 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
     const todoItem = getTodoCompletionItem(document, position);
     if (todoItem !== undefined) {
       items.push(todoItem);
+    }
+
+    const richTextItem = getRichTextCompletion(document, position);
+    if (richTextItem !== undefined) {
+      items.push(richTextItem);
     }
 
     return items;
@@ -131,6 +137,57 @@ function getTodoCompletionItem(document: vscode.TextDocument, position: vscode.P
   return item;
 }
 
+function getRichTextCompletion(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {
+  const range = getCurrentWordRange(document, position);
+  const marker = document.getText(range);
+  const completion = getRichTextCompletionDefinition(marker);
+
+  if (completion === undefined) {
+    return undefined;
+  }
+
+  const item = new vscode.CompletionItem(completion.label, vscode.CompletionItemKind.Operator);
+  item.detail = 'SNote rich text';
+  item.documentation = completion.documentation;
+  item.filterText = marker;
+  item.insertText = new vscode.SnippetString(completion.insertText);
+  item.preselect = true;
+  item.range = range;
+  item.sortText = completion.sortText;
+
+  return item;
+}
+
+function getRichTextCompletionDefinition(
+  marker: string
+): { label: string; documentation: string; insertText: string; sortText: string } | undefined {
+  switch (marker) {
+    case '*':
+      return { label: 'italic', documentation: 'Insert italic text.', insertText: '*${1:text}*', sortText: '0002' };
+    case '**':
+      return { label: 'bold', documentation: 'Insert bold text.', insertText: '**${1:text}**', sortText: '0002' };
+    case '***':
+      return {
+        label: 'bold italic',
+        documentation: 'Insert bold italic text.',
+        insertText: '***${1:text}***',
+        sortText: '0002'
+      };
+    case '~':
+    case '~~':
+      return {
+        label: 'strikethrough',
+        documentation: 'Insert strikethrough text.',
+        insertText: '~~${1:text}~~',
+        sortText: '0002'
+      };
+    case '`':
+      return { label: 'inline code', documentation: 'Insert inline code.', insertText: '`${1:code}`', sortText: '0002' };
+    default:
+      return undefined;
+  }
+}
+
 class SnoteDocumentSymbolProvider implements vscode.DocumentSymbolProvider {
   provideDocumentSymbols(document: vscode.TextDocument): vscode.ProviderResult<vscode.DocumentSymbol[]> {
     return getDocumentSymbols(document.getText()).map((symbol) => toVscodeSymbol(symbol, document));
@@ -174,18 +231,30 @@ function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Pos
 type RichTextDecorationTypes = Record<RichTextKind, vscode.TextEditorDecorationType>;
 
 class SnoteRichTextDecorationManager {
+  private readonly pendingEditors = new Set<vscode.TextEditor>();
+  private refreshTimer: NodeJS.Timeout | undefined;
+
   constructor(private readonly decorations: RichTextDecorationTypes) {}
+
+  dispose(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+
+    this.pendingEditors.clear();
+  }
 
   updateEditors(editors: readonly vscode.TextEditor[]): void {
     for (const editor of editors) {
-      this.updateEditor(editor);
+      this.scheduleEditor(editor);
     }
   }
 
   updateDocument(document: vscode.TextDocument): void {
     for (const editor of vscode.window.visibleTextEditors) {
       if (editor.document === document) {
-        this.updateEditor(editor);
+        this.scheduleEditor(editor);
       }
     }
   }
@@ -197,9 +266,25 @@ class SnoteRichTextDecorationManager {
     }
 
     const ranges = createRichTextDecorationRanges();
+    const visibleLineRanges = getVisibleLineRanges(editor);
 
-    for (const span of getRichTextSpans(editor.document.getText())) {
-      ranges[span.kind].push(new vscode.Range(span.line, span.start, span.line, span.end));
+    if (visibleLineRanges.length === 0) {
+      for (const kind of richTextKinds) {
+        editor.setDecorations(this.decorations[kind], ranges[kind]);
+      }
+      return;
+    }
+
+    for (const visibleRange of visibleLineRanges) {
+      const lines: string[] = [];
+
+      for (let line = visibleRange.start; line <= visibleRange.end; line += 1) {
+        lines.push(editor.document.lineAt(line).text);
+      }
+
+      for (const span of getRichTextSpansForLines(lines, visibleRange.start)) {
+        ranges[span.kind].push(new vscode.Range(span.line, span.start, span.line, span.end));
+      }
     }
 
     for (const kind of richTextKinds) {
@@ -212,6 +297,38 @@ class SnoteRichTextDecorationManager {
       editor.setDecorations(this.decorations[kind], []);
     }
   }
+
+  private scheduleEditor(editor: vscode.TextEditor): void {
+    if (editor.document.languageId !== 'snote') {
+      this.clearEditor(editor);
+      return;
+    }
+
+    this.pendingEditors.add(editor);
+
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+
+    this.refreshTimer = setTimeout(() => {
+      const editors = [...this.pendingEditors];
+      this.pendingEditors.clear();
+      this.refreshTimer = undefined;
+
+      for (const pendingEditor of editors) {
+        this.updateEditor(pendingEditor);
+      }
+    }, richTextRefreshDelayMs);
+  }
+}
+
+function getVisibleLineRanges(editor: vscode.TextEditor): Array<{ start: number; end: number }> {
+  return editor.visibleRanges.map((range) => {
+    return {
+      start: range.start.line,
+      end: Math.min(range.end.line, editor.document.lineCount - 1)
+    };
+  });
 }
 
 function createRichTextDecorationTypes(): RichTextDecorationTypes {

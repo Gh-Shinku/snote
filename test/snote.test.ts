@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   formatDocument,
   getDocumentSymbols,
+  getFormatLineEdits,
   getFoldingRanges,
   getRichTextSpans,
+  getRichTextSpansForLines,
   getTodoCompletion,
   isBalanced,
   parseLine,
@@ -171,12 +173,25 @@ test('getRichTextSpans ignores unclosed markers', () => {
   assert.deepEqual(getRichTextSpans('plain `code text'), []);
 });
 
+test('getRichTextSpans ignores incomplete markers while typing', () => {
+  for (const text of ['*', '**', '***', '~~', '`', '********']) {
+    assert.deepEqual(getRichTextSpans(text), []);
+  }
+});
+
 test('getRichTextSpans identifies multiple spans across lines', () => {
   assert.deepEqual(getRichTextSpans('one **bold** and *italic*\nnext ~~done~~ and `code`'), [
     { kind: 'bold', line: 0, start: 6, end: 10 },
     { kind: 'italic', line: 0, start: 18, end: 24 },
     { kind: 'strikethrough', line: 1, start: 7, end: 11 },
     { kind: 'inlineCode', line: 1, start: 19, end: 23 }
+  ]);
+});
+
+test('getRichTextSpansForLines offsets line numbers', () => {
+  assert.deepEqual(getRichTextSpansForLines(['**bold**', '`code`'], 10), [
+    { kind: 'bold', line: 10, start: 2, end: 6 },
+    { kind: 'inlineCode', line: 11, start: 1, end: 5 }
   ]);
 });
 
@@ -197,6 +212,137 @@ test('formatDocument canonicalizes indentation with spaces', () => {
       'ret'
     ].join('\n')
   );
+});
+
+test('getFormatLineEdits returns no edits for already formatted documents', () => {
+  const text = [
+    'call outer:',
+    '  call inner:',
+    '  ret',
+    'ret'
+  ].join('\n');
+
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), []);
+});
+
+test('formatDocument preserves whitespace-only blank lines', () => {
+  const text = [
+    'call outer:',
+    '    ',
+    'ret'
+  ].join('\n');
+
+  assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, text);
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), []);
+});
+
+test('getFormatLineEdits returns only changed lines', () => {
+  const text = [
+    'call outer:',
+    'call inner:',
+    '  ret',
+    'ret'
+  ].join('\n');
+
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), [
+    { line: 1, text: '  call inner:' }
+  ]);
+});
+
+test('getFormatLineEdits returns multiple changed lines', () => {
+  const text = [
+    ' call outer:  ',
+    'call inner:',
+    '      ret',
+    ' ret'
+  ].join('\n');
+
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), [
+    { line: 0, text: 'call outer:' },
+    { line: 1, text: '  call inner:' },
+    { line: 2, text: '  ret' },
+    { line: 3, text: 'ret' }
+  ]);
+});
+
+test('getFormatLineEdits returns undefined for unbalanced documents', () => {
+  assert.equal(getFormatLineEdits('call open:', { tabSize: 2, insertSpaces: true }), undefined);
+  assert.equal(getFormatLineEdits('ret', { tabSize: 2, insertSpaces: true }), undefined);
+});
+
+test('getFormatLineEdits handles saved rich text sample without full-document changes', () => {
+  const text = [
+    'call project:',
+    '    call task one:',
+    '        call what can i say:',
+    '',
+    '        ret',
+    '',
+    '    ret',
+    '    call task two:',
+    '        call detail:',
+    '        ret',
+    '    ret',
+    '',
+    '    - [ ] ssss',
+    '    - [x] sss',
+    '',
+    '    *aaaaa*',
+    '    **bbbbbb**',
+    '    ~~aaaaaa~~',
+    '    `code`',
+    'ret'
+  ].join('\n');
+
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 4, insertSpaces: true }), []);
+  assert.equal(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true })?.length, 14);
+  assert.deepEqual(getRichTextSpans(text), [
+    { kind: 'italic', line: 15, start: 5, end: 10 },
+    { kind: 'bold', line: 16, start: 6, end: 12 },
+    { kind: 'strikethrough', line: 17, start: 6, end: 12 },
+    { kind: 'inlineCode', line: 18, start: 5, end: 9 }
+  ]);
+});
+
+test('getFormatLineEdits handles nested rich text sample with whitespace-only line', () => {
+  const text = [
+    'call project:',
+    '    call task one:',
+    '        call what can i say:',
+    '',
+    '        ret',
+    '',
+    '    ret',
+    '    call task two:',
+    '        call detail:',
+    '        ret',
+    '    ret',
+    '',
+    '    - [ ] ssss',
+    '    - [x] sss',
+    '',
+    '    *aaaaa*',
+    '    **bbbbbb**',
+    '    ~~aaaaaa~~',
+    '    `code`',
+    '',
+    '',
+    '    call sss:',
+    '        **bbbbbb**',
+    '',
+    '        ',
+    '    ret',
+    'ret'
+  ].join('\n');
+
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 4, insertSpaces: true }), []);
+  assert.deepEqual(getRichTextSpans(text), [
+    { kind: 'italic', line: 15, start: 5, end: 10 },
+    { kind: 'bold', line: 16, start: 6, end: 12 },
+    { kind: 'strikethrough', line: 17, start: 6, end: 12 },
+    { kind: 'inlineCode', line: 18, start: 5, end: 9 },
+    { kind: 'bold', line: 22, start: 10, end: 16 }
+  ]);
 });
 
 test('formatDocument canonicalizes indentation with tabs', () => {

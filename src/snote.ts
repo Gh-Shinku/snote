@@ -21,6 +21,11 @@ export interface FormatResult {
   readonly text: string;
 }
 
+export interface FormatLineEdit {
+  readonly line: number;
+  readonly text: string;
+}
+
 export type RichTextKind = 'bold' | 'italic' | 'boldItalic' | 'strikethrough' | 'inlineCode';
 
 export interface RichTextSpan {
@@ -138,6 +143,10 @@ export function getRichTextSpans(text: string): RichTextSpan[] {
   return splitLines(text).flatMap((line, index) => getRichTextSpansForLine(line, index));
 }
 
+export function getRichTextSpansForLines(lines: readonly string[], startLine: number): RichTextSpan[] {
+  return lines.flatMap((line, index) => getRichTextSpansForLine(line, startLine + index));
+}
+
 function getRichTextSpansForLine(line: string, lineIndex: number): RichTextSpan[] {
   const spans: RichTextSpan[] = [];
   let offset = 0;
@@ -223,6 +232,11 @@ function findDelimitedSpan(
 
       markerEnd += close.length;
     }
+
+    // There is no possible closing marker after contentStart. Returning here
+    // also guarantees that an incomplete marker at end-of-line cannot rescan
+    // the same markerStart forever while the user is typing.
+    return undefined;
   }
 
   return undefined;
@@ -267,6 +281,10 @@ function findItalicSpan(
 
       markerEnd += line.startsWith('**', markerEnd) ? 2 : 1;
     }
+
+    // See findDelimitedSpan: an incomplete italic marker must not retry the
+    // same start offset indefinitely.
+    return undefined;
   }
 
   return undefined;
@@ -318,15 +336,37 @@ export function formatDocument(text: string, options: FormatOptions): FormatResu
     return undefined;
   }
 
+  return { text: getFormattedLines(text, options).join('\n') };
+}
+
+export function getFormatLineEdits(text: string, options: FormatOptions): FormatLineEdit[] | undefined {
+  if (!isBalanced(text)) {
+    return undefined;
+  }
+
+  const original = splitLines(text);
+  const formatted = getFormattedLines(text, options);
+  const edits: FormatLineEdit[] = [];
+
+  for (let index = 0; index < formatted.length; index += 1) {
+    if (original[index] !== formatted[index]) {
+      edits.push({ line: index, text: formatted[index] });
+    }
+  }
+
+  return edits;
+}
+
+function getFormattedLines(text: string, options: FormatOptions): string[] {
   const lines = splitLines(text);
   const indentUnit = options.insertSpaces ? ' '.repeat(options.tabSize) : '\t';
   let depth = 0;
 
-  const formatted = lines.map((raw, index) => {
+  return lines.map((raw, index) => {
     const line = parseLine(raw, index);
 
     if (line.trimmed.length === 0) {
-      return '';
+      return raw;
     }
 
     if (line.kind === 'ret') {
@@ -341,8 +381,6 @@ export function formatDocument(text: string, options: FormatOptions): FormatResu
 
     return next;
   });
-
-  return { text: formatted.join('\n') };
 }
 
 function splitLines(text: string): string[] {
