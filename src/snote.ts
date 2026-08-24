@@ -21,6 +21,15 @@ export interface FormatResult {
   readonly text: string;
 }
 
+export type RichTextKind = 'bold' | 'italic' | 'boldItalic' | 'strikethrough' | 'inlineCode';
+
+export interface RichTextSpan {
+  readonly kind: RichTextKind;
+  readonly line: number;
+  readonly start: number;
+  readonly end: number;
+}
+
 const callPattern = /^call\s+.+:\s*$/;
 const retPattern = /^ret\s*$/;
 const todoPrefixPattern = /^(\s*)(-\s*)$/;
@@ -123,6 +132,144 @@ export function getDocumentSymbols(text: string): DocumentSymbol[] {
 
 export function parseDocument(text: string): ParsedLine[] {
   return splitLines(text).map((line, index) => parseLine(line, index));
+}
+
+export function getRichTextSpans(text: string): RichTextSpan[] {
+  return splitLines(text).flatMap((line, index) => getRichTextSpansForLine(line, index));
+}
+
+function getRichTextSpansForLine(line: string, lineIndex: number): RichTextSpan[] {
+  const spans: RichTextSpan[] = [];
+  let offset = 0;
+
+  while (offset < line.length) {
+    const next = findNextRichTextSpan(line, lineIndex, offset);
+
+    if (next === undefined) {
+      break;
+    }
+
+    spans.push(next.span);
+    offset = next.nextOffset;
+  }
+
+  return spans;
+}
+
+function findNextRichTextSpan(
+  line: string,
+  lineIndex: number,
+  offset: number
+): { span: RichTextSpan; nextOffset: number } | undefined {
+  const candidates = [
+    findDelimitedSpan(line, lineIndex, offset, '`', '`', 'inlineCode'),
+    findDelimitedSpan(line, lineIndex, offset, '***', '***', 'boldItalic'),
+    findDelimitedSpan(line, lineIndex, offset, '**', '**', 'bold'),
+    findDelimitedSpan(line, lineIndex, offset, '~~', '~~', 'strikethrough'),
+    findItalicSpan(line, lineIndex, offset)
+  ].filter((candidate): candidate is { span: RichTextSpan; markerStart: number; nextOffset: number } => {
+    return candidate !== undefined;
+  });
+
+  return candidates.sort((left, right) => {
+    return left.markerStart - right.markerStart || left.nextOffset - right.nextOffset;
+  })[0];
+}
+
+function findDelimitedSpan(
+  line: string,
+  lineIndex: number,
+  offset: number,
+  open: string,
+  close: string,
+  kind: RichTextKind
+): { span: RichTextSpan; markerStart: number; nextOffset: number } | undefined {
+  let markerStart = offset;
+
+  while (markerStart < line.length) {
+    markerStart = line.indexOf(open, markerStart);
+
+    if (markerStart < 0) {
+      return undefined;
+    }
+
+    if (kind === 'bold' && line.startsWith('***', markerStart)) {
+      markerStart += 3;
+      continue;
+    }
+
+    const contentStart = markerStart + open.length;
+    let markerEnd = contentStart;
+
+    while (markerEnd < line.length) {
+      markerEnd = line.indexOf(close, markerEnd);
+
+      if (markerEnd < 0) {
+        return undefined;
+      }
+
+      if (kind === 'bold' && line.startsWith('***', markerEnd)) {
+        markerEnd += 3;
+        continue;
+      }
+
+      if (markerEnd > contentStart) {
+        return {
+          span: { kind, line: lineIndex, start: contentStart, end: markerEnd },
+          markerStart,
+          nextOffset: markerEnd + close.length
+        };
+      }
+
+      markerEnd += close.length;
+    }
+  }
+
+  return undefined;
+}
+
+function findItalicSpan(
+  line: string,
+  lineIndex: number,
+  offset: number
+): { span: RichTextSpan; markerStart: number; nextOffset: number } | undefined {
+  let markerStart = offset;
+
+  while (markerStart < line.length) {
+    markerStart = line.indexOf('*', markerStart);
+
+    if (markerStart < 0) {
+      return undefined;
+    }
+
+    if (line.startsWith('**', markerStart)) {
+      markerStart += 2;
+      continue;
+    }
+
+    const contentStart = markerStart + 1;
+    let markerEnd = contentStart;
+
+    while (markerEnd < line.length) {
+      markerEnd = line.indexOf('*', markerEnd);
+
+      if (markerEnd < 0) {
+        return undefined;
+      }
+
+      if (!line.startsWith('**', markerEnd) && markerEnd > contentStart) {
+        return {
+          span: { kind: 'italic', line: lineIndex, start: contentStart, end: markerEnd },
+          markerStart,
+          nextOffset: markerEnd + 1
+        };
+      }
+
+      markerEnd += line.startsWith('**', markerEnd) ? 2 : 1;
+    }
+  }
+
+  return undefined;
 }
 
 export function getFoldingRanges(text: string): FoldingRange[] {

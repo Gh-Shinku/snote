@@ -4,6 +4,9 @@
   "scopeName": "source.snote",
   "patterns": [
     {
+      "include": "#richText"
+    },
+    {
       "include": "#todo"
     },
     {
@@ -14,6 +17,85 @@
     }
   ],
   "repository": {
+    "richText": {
+      "patterns": [
+        {
+          "name": "markup.inline.raw.snote",
+          "match": "(`)([^`\\n]+)(`)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.raw.begin.snote"
+            },
+            "2": {
+              "name": "markup.inline.raw.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.raw.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.bold.italic.snote",
+          "match": "(\\*\\*\\*)([^*\\n]+)(\\*\\*\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bold-italic.begin.snote"
+            },
+            "2": {
+              "name": "markup.bold.italic.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.bold-italic.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.bold.snote",
+          "match": "(\\*\\*)([^*\\n]+)(\\*\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bold.begin.snote"
+            },
+            "2": {
+              "name": "markup.bold.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.bold.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.italic.snote",
+          "match": "(?<!\\*)(\\*)(?!\\*)([^*\\n]+)(?<!\\*)(\\*)(?!\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.italic.begin.snote"
+            },
+            "2": {
+              "name": "markup.italic.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.italic.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.strikethrough.snote",
+          "match": "(~~)([^~\\n]+)(~~)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.strikethrough.begin.snote"
+            },
+            "2": {
+              "name": "markup.strikethrough.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.strikethrough.end.snote"
+            }
+          }
+        }
+      ]
+    },
     "todo": {
       "patterns": [
         {

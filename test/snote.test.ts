@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatDocument, getDocumentSymbols, getFoldingRanges, getTodoCompletion, isBalanced, parseLine, toggleTodoLine } from '../src/snote';
+import {
+  formatDocument,
+  getDocumentSymbols,
+  getFoldingRanges,
+  getRichTextSpans,
+  getTodoCompletion,
+  isBalanced,
+  parseLine,
+  toggleTodoLine
+} from '../src/snote';
 
 test('parseLine identifies call, ret, and other lines', () => {
   assert.equal(parseLine('  call project title:', 0).kind, 'call');
@@ -118,6 +127,57 @@ test('getDocumentSymbols handles siblings and unclosed blocks', () => {
   assert.equal(symbols[1].children.length, 1);
   assert.equal(symbols[1].children[0].name, 'nested');
   assert.equal(symbols[1].children[0].end, 4);
+});
+
+test('getRichTextSpans identifies bold text', () => {
+  assert.deepEqual(getRichTextSpans('plain **bold** text'), [
+    { kind: 'bold', line: 0, start: 8, end: 12 }
+  ]);
+});
+
+test('getRichTextSpans identifies italic text', () => {
+  assert.deepEqual(getRichTextSpans('plain *italic* text'), [
+    { kind: 'italic', line: 0, start: 7, end: 13 }
+  ]);
+});
+
+test('getRichTextSpans identifies bold italic text', () => {
+  assert.deepEqual(getRichTextSpans('plain ***both*** text'), [
+    { kind: 'boldItalic', line: 0, start: 9, end: 13 }
+  ]);
+});
+
+test('getRichTextSpans identifies strikethrough text', () => {
+  assert.deepEqual(getRichTextSpans('plain ~~deleted~~ text'), [
+    { kind: 'strikethrough', line: 0, start: 8, end: 15 }
+  ]);
+});
+
+test('getRichTextSpans identifies inline code', () => {
+  assert.deepEqual(getRichTextSpans('plain `code` text'), [
+    { kind: 'inlineCode', line: 0, start: 7, end: 11 }
+  ]);
+});
+
+test('getRichTextSpans does not parse markers inside inline code', () => {
+  assert.deepEqual(getRichTextSpans('plain `**code**` text'), [
+    { kind: 'inlineCode', line: 0, start: 7, end: 15 }
+  ]);
+});
+
+test('getRichTextSpans ignores unclosed markers', () => {
+  assert.deepEqual(getRichTextSpans('plain **bold text'), []);
+  assert.deepEqual(getRichTextSpans('plain *italic text'), []);
+  assert.deepEqual(getRichTextSpans('plain `code text'), []);
+});
+
+test('getRichTextSpans identifies multiple spans across lines', () => {
+  assert.deepEqual(getRichTextSpans('one **bold** and *italic*\nnext ~~done~~ and `code`'), [
+    { kind: 'bold', line: 0, start: 6, end: 10 },
+    { kind: 'italic', line: 0, start: 18, end: 24 },
+    { kind: 'strikethrough', line: 1, start: 7, end: 11 },
+    { kind: 'inlineCode', line: 1, start: 19, end: 23 }
+  ]);
 });
 
 test('formatDocument canonicalizes indentation with spaces', () => {

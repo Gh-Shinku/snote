@@ -1,16 +1,39 @@
 import * as vscode from 'vscode';
-import { DocumentSymbol, formatDocument, getDocumentSymbols, getFoldingRanges, getTodoCompletion, toggleTodoLine } from './snote';
+import {
+  DocumentSymbol,
+  RichTextKind,
+  formatDocument,
+  getDocumentSymbols,
+  getFoldingRanges,
+  getRichTextSpans,
+  getTodoCompletion,
+  toggleTodoLine
+} from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
+const richTextKinds: RichTextKind[] = ['bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
 
 export function activate(context: vscode.ExtensionContext): void {
+  const richTextDecorations = createRichTextDecorationTypes();
+  const richTextDecorationManager = new SnoteRichTextDecorationManager(richTextDecorations);
+
   context.subscriptions.push(
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
     vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' '),
     vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
-    vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor)
+    vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor),
+    vscode.window.onDidChangeVisibleTextEditors((editors) => richTextDecorationManager.updateEditors(editors)),
+    vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor !== undefined) {
+        richTextDecorationManager.updateEditor(editor);
+      }
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => richTextDecorationManager.updateDocument(event.document)),
+    ...Object.values(richTextDecorations)
   );
+
+  richTextDecorationManager.updateEditors(vscode.window.visibleTextEditors);
 }
 
 export function deactivate(): void {}
@@ -146,4 +169,86 @@ function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Pos
   const linePrefix = document.lineAt(position).text.slice(0, position.character);
   const currentWord = linePrefix.match(/[^\s:]*$/)?.[0] ?? '';
   return new vscode.Range(position.line, position.character - currentWord.length, position.line, position.character);
+}
+
+type RichTextDecorationTypes = Record<RichTextKind, vscode.TextEditorDecorationType>;
+
+class SnoteRichTextDecorationManager {
+  constructor(private readonly decorations: RichTextDecorationTypes) {}
+
+  updateEditors(editors: readonly vscode.TextEditor[]): void {
+    for (const editor of editors) {
+      this.updateEditor(editor);
+    }
+  }
+
+  updateDocument(document: vscode.TextDocument): void {
+    for (const editor of vscode.window.visibleTextEditors) {
+      if (editor.document === document) {
+        this.updateEditor(editor);
+      }
+    }
+  }
+
+  updateEditor(editor: vscode.TextEditor): void {
+    if (editor.document.languageId !== 'snote') {
+      this.clearEditor(editor);
+      return;
+    }
+
+    const ranges = createRichTextDecorationRanges();
+
+    for (const span of getRichTextSpans(editor.document.getText())) {
+      ranges[span.kind].push(new vscode.Range(span.line, span.start, span.line, span.end));
+    }
+
+    for (const kind of richTextKinds) {
+      editor.setDecorations(this.decorations[kind], ranges[kind]);
+    }
+  }
+
+  private clearEditor(editor: vscode.TextEditor): void {
+    for (const kind of richTextKinds) {
+      editor.setDecorations(this.decorations[kind], []);
+    }
+  }
+}
+
+function createRichTextDecorationTypes(): RichTextDecorationTypes {
+  return {
+    bold: vscode.window.createTextEditorDecorationType({
+      fontWeight: 'bold',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
+    italic: vscode.window.createTextEditorDecorationType({
+      fontStyle: 'italic',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
+    boldItalic: vscode.window.createTextEditorDecorationType({
+      fontStyle: 'italic',
+      fontWeight: 'bold',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
+    strikethrough: vscode.window.createTextEditorDecorationType({
+      textDecoration: 'line-through',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
+    inlineCode: vscode.window.createTextEditorDecorationType({
+      backgroundColor: new vscode.ThemeColor('textCodeBlock.background'),
+      border: '1px solid',
+      borderColor: new vscode.ThemeColor('editorWidget.border'),
+      borderRadius: '3px',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    })
+  };
+}
+
+function createRichTextDecorationRanges(): Record<RichTextKind, vscode.Range[]> {
+  return {
+    bold: [],
+    italic: [],
+    boldItalic: [],
+    strikethrough: [],
+    inlineCode: []
+  };
 }
