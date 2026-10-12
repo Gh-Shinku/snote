@@ -46,7 +46,26 @@
       {
         "language": "snote",
         "scopeName": "source.snote",
-        "path": "./syntaxes/snote.tmLanguage.json"
+        "path": "./syntaxes/snote.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.javascript": "javascript",
+          "meta.embedded.block.typescript": "typescript",
+          "meta.embedded.block.typescriptreact": "typescriptreact",
+          "meta.embedded.block.javascriptreact": "javascriptreact",
+          "meta.embedded.block.python": "python",
+          "meta.embedded.block.json": "json",
+          "meta.embedded.block.shellscript": "shellscript",
+          "meta.embedded.block.html": "html",
+          "meta.embedded.block.css": "css",
+          "meta.embedded.block.sql": "sql",
+          "meta.embedded.block.go": "go",
+          "meta.embedded.block.rust": "rust",
+          "meta.embedded.block.java": "java",
+          "meta.embedded.block.c": "c",
+          "meta.embedded.block.cpp": "cpp",
+          "meta.embedded.block.yaml": "yaml",
+          "meta.embedded.block.markdown": "markdown"
+        }
       }
     ]
   },
@@ -54,12 +73,14 @@
     "compile": "tsc -p ./",
     "package": "vsce package",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/test/snote.test.js"
+    "test": "npm run compile && node --test out/test/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.92.0",
     "@vscode/vsce": "^3.9.2",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   }
 }

@@ -39,6 +39,22 @@ and preserves inline rich-text content as written. Lines inside triple-backtick
 code fences, including the fence lines themselves, keep their original whitespace.
 Inline rich-text styling is disabled inside these fences.
 
+Add a language name after the opening fence to highlight code using VS Code's
+existing TextMate grammars. For example:
+
+````snote
+call example:
+  ```typescript
+  const answer: number = 42;
+  ```
+ret
+````
+
+Supported language labels include JavaScript/JSX, TypeScript/TSX, Python,
+JSON, Bash, HTML, CSS, SQL, Go, Rust, Java, C, C++, YAML, and Markdown.
+Unrecognized labels remain plain code. Highlighting depends on the matching
+language grammar being available in VS Code.
+
 ## Build
 
 ```bash
