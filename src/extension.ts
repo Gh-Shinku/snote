@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   DocumentSymbol,
   RichTextKind,
+  getCodeFenceLengthAfterLine,
   getDocumentSymbols,
   getFormatLineEdits,
   getFoldingRanges,
@@ -275,16 +276,27 @@ class SnoteRichTextDecorationManager {
       return;
     }
 
+    let fenceLength = 0;
+    let nextLine = 0;
     for (const visibleRange of visibleLineRanges) {
+      for (; nextLine < visibleRange.start; nextLine += 1) {
+        fenceLength = getCodeFenceLengthAfterLine(editor.document.lineAt(nextLine).text, fenceLength);
+      }
+
       const lines: string[] = [];
 
       for (let line = visibleRange.start; line <= visibleRange.end; line += 1) {
         lines.push(editor.document.lineAt(line).text);
       }
 
-      for (const span of getRichTextSpansForLines(lines, visibleRange.start)) {
+      for (const span of getRichTextSpansForLines(lines, visibleRange.start, fenceLength)) {
         ranges[span.kind].push(new vscode.Range(span.line, span.start, span.line, span.end));
       }
+
+      for (const line of lines) {
+        fenceLength = getCodeFenceLengthAfterLine(line, fenceLength);
+      }
+      nextLine = visibleRange.end + 1;
     }
 
     for (const kind of richTextKinds) {

@@ -136,15 +136,56 @@ export function getDocumentSymbols(text: string): DocumentSymbol[] {
 }
 
 export function parseDocument(text: string): ParsedLine[] {
-  return splitLines(text).map((line, index) => parseLine(line, index));
+  let fenceLength = 0;
+
+  return splitLines(text).map((raw, index) => {
+    const trimmed = raw.trim();
+    const nextFenceLength = getCodeFenceLengthAfterLine(trimmed, fenceLength);
+    if (fenceLength > 0 || nextFenceLength > 0) {
+      fenceLength = nextFenceLength;
+      return { index, raw, trimmed, kind: 'other' };
+    }
+
+    return parseLine(raw, index);
+  });
 }
 
 export function getRichTextSpans(text: string): RichTextSpan[] {
-  return splitLines(text).flatMap((line, index) => getRichTextSpansForLine(line, index));
+  return getRichTextSpansForLines(splitLines(text), 0);
 }
 
-export function getRichTextSpansForLines(lines: readonly string[], startLine: number): RichTextSpan[] {
-  return lines.flatMap((line, index) => getRichTextSpansForLine(line, startLine + index));
+export function getRichTextSpansForLines(
+  lines: readonly string[],
+  startLine: number,
+  initialFenceLength = 0
+): RichTextSpan[] {
+  const spans: RichTextSpan[] = [];
+  let fenceLength = initialFenceLength;
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    const nextFenceLength = getCodeFenceLengthAfterLine(trimmed, fenceLength);
+    if (fenceLength === 0 && nextFenceLength === 0) {
+      spans.push(...getRichTextSpansForLine(line, startLine + index));
+    }
+    fenceLength = nextFenceLength;
+  });
+
+  return spans;
+}
+
+export function getCodeFenceLengthAfterLine(line: string, currentLength: number): number {
+  const trimmed = line.trim();
+  if (currentLength > 0) {
+    return /^`+\s*$/.test(trimmed) && getCodeFenceLength(trimmed) >= currentLength ? 0 : currentLength;
+  }
+
+  return getCodeFenceLength(trimmed);
+}
+
+function getCodeFenceLength(line: string): number {
+  const match = /^(`{3,})([^`]*)$/.exec(line.trim());
+  return match === null ? 0 : match[1].length;
 }
 
 function getRichTextSpansForLine(line: string, lineIndex: number): RichTextSpan[] {
@@ -207,6 +248,11 @@ function findDelimitedSpan(
       continue;
     }
 
+    if (kind === 'inlineCode' && (line[markerStart - 1] === '`' || line[markerStart + 1] === '`')) {
+      markerStart += 1;
+      continue;
+    }
+
     const contentStart = markerStart + open.length;
     let markerEnd = contentStart;
 
@@ -219,6 +265,11 @@ function findDelimitedSpan(
 
       if (kind === 'bold' && line.startsWith('***', markerEnd)) {
         markerEnd += 3;
+        continue;
+      }
+
+      if (kind === 'inlineCode' && (line[markerEnd - 1] === '`' || line[markerEnd + 1] === '`')) {
+        markerEnd += 1;
         continue;
       }
 
@@ -358,15 +409,20 @@ export function getFormatLineEdits(text: string, options: FormatOptions): Format
 }
 
 function getFormattedLines(text: string, options: FormatOptions): string[] {
-  const lines = splitLines(text);
+  const lines = parseDocument(text);
   const indentUnit = options.insertSpaces ? ' '.repeat(options.tabSize) : '\t';
   let depth = 0;
+  let fenceLength = 0;
 
-  return lines.map((raw, index) => {
-    const line = parseLine(raw, index);
+  return lines.map((line) => {
+    const nextFenceLength = getCodeFenceLengthAfterLine(line.trimmed, fenceLength);
+    if (fenceLength > 0 || nextFenceLength > 0) {
+      fenceLength = nextFenceLength;
+      return line.raw;
+    }
 
     if (line.trimmed.length === 0) {
-      return raw;
+      return line.raw;
     }
 
     if (line.kind === 'ret') {

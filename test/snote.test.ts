@@ -161,6 +161,38 @@ test('getRichTextSpans identifies inline code', () => {
   ]);
 });
 
+test('getRichTextSpans does not style backticks in code fences', () => {
+  const text = [
+    'before `inline`',
+    '  ```typescript',
+    '  **literal** and `literal`',
+    '  ```',
+    'after `inline`'
+  ].join('\n');
+
+  assert.deepEqual(getRichTextSpans(text), [
+    { kind: 'inlineCode', line: 0, start: 8, end: 14 },
+    { kind: 'inlineCode', line: 4, start: 7, end: 13 }
+  ]);
+  assert.deepEqual(getRichTextSpans('text ``` and `inline`'), [
+    { kind: 'inlineCode', line: 0, start: 14, end: 20 }
+  ]);
+});
+
+test('getRichTextSpansForLines respects a fence opened before the visible lines', () => {
+  assert.deepEqual(getRichTextSpansForLines(['**literal**', '```', '*italic*'], 5, 3), [
+    { kind: 'italic', line: 7, start: 1, end: 7 }
+  ]);
+});
+
+test('a shorter backtick run does not close a longer code fence', () => {
+  const text = ['````', '```', '**literal**', '````', '**bold**'].join('\n');
+  assert.deepEqual(getRichTextSpans(text), [
+    { kind: 'bold', line: 4, start: 2, end: 6 }
+  ]);
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), []);
+});
+
 test('getRichTextSpans does not parse markers inside inline code', () => {
   assert.deepEqual(getRichTextSpans('plain `**code**` text'), [
     { kind: 'inlineCode', line: 0, start: 7, end: 15 }
@@ -234,6 +266,40 @@ test('formatDocument preserves whitespace-only blank lines', () => {
 
   assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, text);
   assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), []);
+});
+
+test('formatDocument preserves fenced code and resumes indentation after it', () => {
+  const text = [
+    ' call outer:  ',
+    '   ```typescript',
+    ' call ignored:',
+    '\t  ret  ',
+    '   ```',
+    'plain text',
+    ' ret'
+  ].join('\n');
+
+  assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, [
+    'call outer:',
+    '   ```typescript',
+    ' call ignored:',
+    '\t  ret  ',
+    '   ```',
+    '  plain text',
+    'ret'
+  ].join('\n'));
+  assert.deepEqual(getFormatLineEdits(text, { tabSize: 2, insertSpaces: true }), [
+    { line: 0, text: 'call outer:' },
+    { line: 5, text: '  plain text' },
+    { line: 6, text: 'ret' }
+  ]);
+  assert.equal(isBalanced(text), true);
+});
+
+test('formatDocument preserves an unclosed code fence through end of file', () => {
+  const text = '```\n  ret\n  call ignored:';
+  assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, text);
+  assert.deepEqual(getFormatLineEdits('```\n ret\n```', { tabSize: 2, insertSpaces: true }), []);
 });
 
 test('getFormatLineEdits returns only changed lines', () => {

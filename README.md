@@ -35,7 +35,9 @@ ret
 ```
 
 The markers stay visible in the editor. The formatter only adjusts indentation
-and preserves inline rich-text content as written.
+and preserves inline rich-text content as written. Lines inside triple-backtick
+code fences, including the fence lines themselves, keep their original whitespace.
+Inline rich-text styling is disabled inside these fences.
 
 ## Build
 
