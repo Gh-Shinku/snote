@@ -432,6 +432,30 @@
         },
         {
           "name": "markup.fenced_code.block.snote",
+          "begin": "^\\s*(`{3,})\\s*(?i:(ocaml|ml|mli))(?:\\s+[^`]*)?$",
+          "end": "^\\s*(\\1`*)\\s*$",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.fence.begin.snote"
+            },
+            "2": {
+              "name": "fenced_code.block.language.snote"
+            }
+          },
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.fence.end.snote"
+            }
+          },
+          "contentName": "meta.embedded.block.ocaml",
+          "patterns": [
+            {
+              "include": "source.ocaml"
+            }
+          ]
+        },
+        {
+          "name": "markup.fenced_code.block.snote",
           "begin": "^\\s*(`{3,})[^`]*$",
           "end": "^\\s*(\\1`*)\\s*$",
           "beginCaptures": {

@@ -344,8 +344,26 @@ function findItalicSpan(
 export function getFoldingRanges(text: string): FoldingRange[] {
   const stack: number[] = [];
   const ranges: FoldingRange[] = [];
+  const lines = parseDocument(text);
+  let fenceLength = 0;
+  let fenceStart: number | undefined;
 
-  for (const line of parseDocument(text)) {
+  for (const line of lines) {
+    const nextFenceLength = getCodeFenceLengthAfterLine(line.trimmed, fenceLength);
+    const isFenceLine = fenceLength > 0 || nextFenceLength > 0;
+
+    if (fenceLength === 0 && nextFenceLength > 0) {
+      fenceStart = line.index;
+    } else if (fenceLength > 0 && nextFenceLength === 0 && fenceStart !== undefined) {
+      ranges.push({ start: fenceStart, end: line.index });
+      fenceStart = undefined;
+    }
+
+    fenceLength = nextFenceLength;
+    if (isFenceLine) {
+      continue;
+    }
+
     if (line.kind === 'call') {
       stack.push(line.index);
       continue;
@@ -357,6 +375,10 @@ export function getFoldingRanges(text: string): FoldingRange[] {
         ranges.push({ start, end: line.index });
       }
     }
+  }
+
+  if (fenceStart !== undefined && lines.length - 1 > fenceStart) {
+    ranges.push({ start: fenceStart, end: lines.length - 1 });
   }
 
   return ranges.sort((left, right) => left.start - right.start || left.end - right.end);

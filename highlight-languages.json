@@ -1,0 +1,32 @@
+[
+  { "id": "javascript", "aliases": ["js", "javascript", "mjs", "cjs"], "grammar": { "kind": "scope", "scope": "source.js" }, "vscodeLanguageId": "javascript" },
+  { "id": "typescript", "aliases": ["ts", "typescript"], "grammar": { "kind": "scope", "scope": "source.ts" }, "vscodeLanguageId": "typescript" },
+  { "id": "typescriptreact", "aliases": ["tsx"], "grammar": { "kind": "scope", "scope": "source.tsx" }, "vscodeLanguageId": "typescriptreact" },
+  { "id": "javascriptreact", "aliases": ["jsx"], "grammar": { "kind": "scope", "scope": "source.js.jsx" }, "vscodeLanguageId": "javascriptreact" },
+  { "id": "python", "aliases": ["py", "python"], "grammar": { "kind": "scope", "scope": "source.python" }, "vscodeLanguageId": "python" },
+  { "id": "json", "aliases": ["json"], "grammar": { "kind": "scope", "scope": "source.json" }, "vscodeLanguageId": "json" },
+  { "id": "shellscript", "aliases": ["sh", "bash", "shell", "zsh"], "grammar": { "kind": "scope", "scope": "source.shell" }, "vscodeLanguageId": "shellscript" },
+  { "id": "html", "aliases": ["html", "htm"], "grammar": { "kind": "scope", "scope": "text.html.basic" }, "vscodeLanguageId": "html" },
+  { "id": "css", "aliases": ["css"], "grammar": { "kind": "scope", "scope": "source.css" }, "vscodeLanguageId": "css" },
+  { "id": "sql", "aliases": ["sql"], "grammar": { "kind": "scope", "scope": "source.sql" }, "vscodeLanguageId": "sql" },
+  { "id": "go", "aliases": ["go", "golang"], "grammar": { "kind": "scope", "scope": "source.go" }, "vscodeLanguageId": "go" },
+  { "id": "rust", "aliases": ["rs", "rust"], "grammar": { "kind": "scope", "scope": "source.rust" }, "vscodeLanguageId": "rust" },
+  { "id": "java", "aliases": ["java"], "grammar": { "kind": "scope", "scope": "source.java" }, "vscodeLanguageId": "java" },
+  { "id": "c", "aliases": ["c"], "grammar": { "kind": "scope", "scope": "source.c" }, "vscodeLanguageId": "c" },
+  { "id": "cpp", "aliases": ["cpp", "c++", "cxx", "cc"], "grammar": { "kind": "scope", "scope": "source.cpp" }, "vscodeLanguageId": "cpp" },
+  { "id": "yaml", "aliases": ["yaml", "yml"], "grammar": { "kind": "scope", "scope": "source.yaml" }, "vscodeLanguageId": "yaml" },
+  { "id": "markdown", "aliases": ["md", "markdown"], "grammar": { "kind": "scope", "scope": "text.html.markdown" }, "vscodeLanguageId": "markdown" },
+  {
+    "id": "ocaml",
+    "aliases": ["ocaml", "ml", "mli"],
+    "grammar": {
+      "kind": "bundled",
+      "scope": "source.ocaml",
+      "files": [
+        { "scope": "source.ocaml", "path": "./syntaxes/vendor/ocaml/ocaml.json" },
+        { "scope": "source.ocaml.interface", "path": "./syntaxes/vendor/ocaml/ocaml.interface.json" },
+        { "scope": "source.ocaml.ocamldoc", "path": "./syntaxes/vendor/ocaml/ocamldoc.json" }
+      ]
+    }
+  }
+]

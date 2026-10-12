@@ -3,6 +3,7 @@
   "displayName": "SNote",
   "description": "Language support for hierarchical realtime persistent notes.",
   "version": "0.0.1",
+  "license": "MIT",
   "publisher": "local",
   "repository": {
     "type": "git",
@@ -66,14 +67,28 @@
           "meta.embedded.block.yaml": "yaml",
           "meta.embedded.block.markdown": "markdown"
         }
+      },
+      {
+        "scopeName": "source.ocaml",
+        "path": "./syntaxes/vendor/ocaml/ocaml.json"
+      },
+      {
+        "scopeName": "source.ocaml.interface",
+        "path": "./syntaxes/vendor/ocaml/ocaml.interface.json"
+      },
+      {
+        "scopeName": "source.ocaml.ocamldoc",
+        "path": "./syntaxes/vendor/ocaml/ocamldoc.json"
       }
     ]
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "package": "vsce package",
+    "generate:highlight": "node scripts/generate-highlighting.cjs",
+    "check:highlight": "node scripts/generate-highlighting.cjs --check",
+    "package": "npm run check:highlight && vsce package",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/test/*.test.js"
+    "test": "npm run check:highlight && npm run compile && node --test out/test/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

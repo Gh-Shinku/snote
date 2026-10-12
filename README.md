@@ -17,6 +17,7 @@ The language is a hierarchy of `call <title>:` and `ret` pairs.
 
 - Syntax highlighting for `call`, titles, `:`, and `ret`
 - Folding for matched `call` / `ret` blocks
+- Folding for fenced code blocks
 - Whole-document formatting using the editor indentation settings
 - Completion for `call` blocks
 - Auto-complete `- [ ]` TODO items: type `-` (or `- `) at the start of a line and accept the **TODO item** suggestion
@@ -51,9 +52,36 @@ ret
 ````
 
 Supported language labels include JavaScript/JSX, TypeScript/TSX, Python,
-JSON, Bash, HTML, CSS, SQL, Go, Rust, Java, C, C++, YAML, and Markdown.
+JSON, Bash, HTML, CSS, SQL, Go, Rust, Java, C, C++, YAML, Markdown, and
+OCaml (`ocaml`, `ml`, `mli`). OCaml highlighting is included with SNote.
 Unrecognized labels remain plain code. Highlighting depends on the matching
-language grammar being available in VS Code.
+language grammar being available in VS Code, except for bundled grammars such
+as OCaml.
+
+### Add a code language
+
+Add one entry to [highlight-languages.json](highlight-languages.json). Every
+entry declares an `id`, `aliases` accepted after the opening fence, and a
+`grammar` source. Use `kind: "scope"` to reuse an existing VS Code TextMate
+scope, or `kind: "bundled"` with a `files` list to package your own TextMate
+grammar and any scopes it includes. `vscodeLanguageId` is optional; it enables
+embedded-language editor behavior when that language ID is available. Both
+grammar sources use the same registry and generated fence rules.
+
+```json
+{
+  "id": "example",
+  "aliases": ["example", "ex"],
+  "grammar": { "kind": "scope", "scope": "source.example" },
+  "vscodeLanguageId": "example"
+}
+```
+
+After changing the registry, run `npm run generate:highlight` and commit the
+generated grammar and `package.json` changes. `npm run check:highlight` verifies
+that generated files are current. For a bundled grammar, place its JSON files
+under `syntaxes/`, include any dependent scopes in `files`, and retain its
+license and upstream attribution.
 
 ## Build
 
@@ -116,3 +144,8 @@ git push origin snote-0.0.1
 The workflow validates the tag against `package.json`, packages the extension as
 `dist/snote-0.0.1.vsix`, creates a GitHub Release named `snote-0.0.1`, and uploads
 the VSIX asset.
+
+## License
+
+SNote is licensed under the [MIT License](LICENSE). The bundled OCaml grammar
+retains its separate [ISC License](syntaxes/vendor/ocaml/LICENSE).

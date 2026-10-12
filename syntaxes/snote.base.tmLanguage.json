@@ -1,0 +1,146 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SNote",
+  "scopeName": "source.snote",
+  "patterns": [
+    {
+      "include": "#richText"
+    },
+    {
+      "include": "#todo"
+    },
+    {
+      "include": "#call"
+    },
+    {
+      "include": "#ret"
+    }
+  ],
+  "repository": {
+    "richText": {
+      "patterns": [
+        {
+          "name": "markup.inline.raw.snote",
+          "match": "(`)([^`\\n]+)(`)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.raw.begin.snote"
+            },
+            "2": {
+              "name": "markup.inline.raw.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.raw.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.bold.italic.snote",
+          "match": "(\\*\\*\\*)([^*\\n]+)(\\*\\*\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bold-italic.begin.snote"
+            },
+            "2": {
+              "name": "markup.bold.italic.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.bold-italic.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.bold.snote",
+          "match": "(\\*\\*)([^*\\n]+)(\\*\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.bold.begin.snote"
+            },
+            "2": {
+              "name": "markup.bold.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.bold.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.italic.snote",
+          "match": "(?<!\\*)(\\*)(?!\\*)([^*\\n]+)(?<!\\*)(\\*)(?!\\*)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.italic.begin.snote"
+            },
+            "2": {
+              "name": "markup.italic.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.italic.end.snote"
+            }
+          }
+        },
+        {
+          "name": "markup.strikethrough.snote",
+          "match": "(~~)([^~\\n]+)(~~)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.strikethrough.begin.snote"
+            },
+            "2": {
+              "name": "markup.strikethrough.content.snote"
+            },
+            "3": {
+              "name": "punctuation.definition.strikethrough.end.snote"
+            }
+          }
+        }
+      ]
+    },
+    "todo": {
+      "patterns": [
+        {
+          "name": "meta.todo.unchecked.snote",
+          "match": "^(\\s*)(-\\s+)(\\[ \\])(.*)$",
+          "captures": {
+            "3": {
+              "name": "punctuation.definition.todo.unchecked.snote"
+            }
+          }
+        },
+        {
+          "name": "meta.todo.checked.snote",
+          "match": "^(\\s*)(-\\s+)(\\[[xX]\\])(.*)$",
+          "captures": {
+            "3": {
+              "name": "punctuation.definition.todo.checked.snote"
+            }
+          }
+        }
+      ]
+    },
+    "call": {
+      "name": "meta.call.snote",
+      "match": "^(\\s*)(call)(\\s+)(.*)(:)\\s*$",
+      "captures": {
+        "2": {
+          "name": "keyword.control.call.snote"
+        },
+        "4": {
+          "name": "string.unquoted.title.snote"
+        },
+        "5": {
+          "name": "punctuation.definition.block.snote"
+        }
+      }
+    },
+    "ret": {
+      "name": "meta.ret.snote",
+      "match": "^\\s*(ret)\\s*$",
+      "captures": {
+        "1": {
+          "name": "keyword.control.ret.snote"
+        }
+      }
+    }
+  }
+}

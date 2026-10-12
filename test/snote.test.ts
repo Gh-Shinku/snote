@@ -60,6 +60,38 @@ test('getFoldingRanges ignores unmatched lines', () => {
   ]);
 });
 
+test('getFoldingRanges includes code fences inside and beside call blocks', () => {
+  const text = [
+    'call outer:',
+    '  ```typescript',
+    '  call code:',
+    '  ret',
+    '  ```',
+    'ret',
+    '```python',
+    'print(1)',
+    '```'
+  ].join('\n');
+
+  assert.deepEqual(getFoldingRanges(text), [
+    { start: 0, end: 5 },
+    { start: 1, end: 4 },
+    { start: 6, end: 8 }
+  ]);
+});
+
+test('getFoldingRanges keeps a long fence open until a matching close', () => {
+  const text = ['````', 'code', '```', 'more code', '`````', 'ret'].join('\n');
+  assert.deepEqual(getFoldingRanges(text), [{ start: 0, end: 4 }]);
+});
+
+test('getFoldingRanges folds an unclosed code fence to the last line', () => {
+  assert.deepEqual(getFoldingRanges('```js\nconst value = 1;\nmore code'), [
+    { start: 0, end: 2 }
+  ]);
+  assert.deepEqual(getFoldingRanges('```js'), []);
+});
+
 test('isBalanced detects balanced and unbalanced documents', () => {
   assert.equal(isBalanced('call x:\nret'), true);
   assert.equal(isBalanced('call x:'), false);

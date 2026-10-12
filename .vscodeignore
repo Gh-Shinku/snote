@@ -5,6 +5,8 @@ editors/**
 examples/**
 src/**
 test/**
+scripts/**
+syntaxes/snote.base.tmLanguage.json
 .gitignore
 AGENTS.md
 tsconfig.json
