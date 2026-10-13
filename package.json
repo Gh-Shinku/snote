@@ -21,6 +21,10 @@
       {
         "command": "snote.toggleTodo",
         "title": "SNote: Toggle TODO item"
+      },
+      {
+        "command": "snote.copyWithoutIndentation",
+        "title": "SNote: Copy Without Indentation"
       }
     ],
     "keybindings": [

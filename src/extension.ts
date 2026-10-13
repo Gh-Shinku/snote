@@ -3,11 +3,13 @@ import {
   DocumentSymbol,
   RichTextKind,
   getCodeFenceLengthAfterLine,
+  getCopyLineRange,
   getDocumentSymbols,
   getFormatLineEdits,
   getFoldingRanges,
   getRichTextSpansForLines,
   getTodoCompletion,
+  removeCommonIndent,
   toggleTodoLine
 } from './snote';
 
@@ -25,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`'),
     vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
     vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor),
+    vscode.commands.registerTextEditorCommand('snote.copyWithoutIndentation', copyWithoutIndentation),
     vscode.window.onDidChangeVisibleTextEditors((editors) => richTextDecorationManager.updateEditors(editors)),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor !== undefined) {
@@ -221,6 +224,25 @@ function toggleTodoInEditor(editor: vscode.TextEditor): void {
   if (handledLines.size > 0) {
     void vscode.workspace.applyEdit(edit);
   }
+}
+
+async function copyWithoutIndentation(editor: vscode.TextEditor): Promise<void> {
+  const selections = editor.selections.filter((selection) => !selection.isEmpty);
+  if (selections.length === 0) {
+    void vscode.window.showInformationMessage('Select text to copy without indentation.');
+    return;
+  }
+
+  const tabSize = typeof editor.options.tabSize === 'number' ? editor.options.tabSize : 4;
+  const separator = editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n';
+  const text = selections
+    .map((selection) => {
+      const lines = getCopyLineRange(selection.start.line, selection.end.line, selection.end.character);
+      const range = new vscode.Range(lines.start, 0, lines.end, editor.document.lineAt(lines.end).text.length);
+      return removeCommonIndent(editor.document.getText(range), tabSize);
+    })
+    .join(separator);
+  await vscode.env.clipboard.writeText(text);
 }
 
 function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Position): vscode.Range {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatDocument,
+  getCopyLineRange,
   getDocumentSymbols,
   getFormatLineEdits,
   getFoldingRanges,
@@ -10,6 +11,7 @@ import {
   getTodoCompletion,
   isBalanced,
   parseLine,
+  removeCommonIndent,
   toggleTodoLine
 } from '../src/snote';
 
@@ -123,6 +125,48 @@ test('toggleTodoLine returns undefined for non-todo lines', () => {
   assert.equal(toggleTodoLine('- [] empty'), undefined);
   assert.equal(toggleTodoLine('plain note'), undefined);
   assert.equal(toggleTodoLine('call task:'), undefined);
+});
+
+test('removeCommonIndent preserves nested structure and line endings', () => {
+  const text = '    call task:\r\n        detail\r\n    ret\r\n';
+  assert.equal(removeCommonIndent(text, 4), 'call task:\r\n    detail\r\nret\r\n');
+  assert.equal(removeCommonIndent('  first\n  \n    second', 2), 'first\n  \n  second');
+});
+
+test('getCopyLineRange includes complete selected lines without an extra boundary line', () => {
+  assert.deepEqual(getCopyLineRange(0, 3, 5), { start: 0, end: 3 });
+  assert.deepEqual(getCopyLineRange(0, 4, 0), { start: 0, end: 3 });
+  assert.deepEqual(getCopyLineRange(2, 2, 0), { start: 2, end: 2 });
+});
+
+test('removeCommonIndent uses visual columns for mixed tabs and spaces', () => {
+  assert.equal(removeCommonIndent('\tcall task:\n    ret', 4), 'call task:\nret');
+  assert.equal(removeCommonIndent('  first\n\tsecond', 4), 'first\n  second');
+});
+
+test('removeCommonIndent preserves relative indentation inside code fences', () => {
+  const text = [
+    '    call example:',
+    '    ```python',
+    'print("top level")',
+    '  if ready:',
+    '    print("nested")',
+    '    ```',
+    '    ret'
+  ].join('\n');
+
+  assert.equal(removeCommonIndent(text, 4), [
+    'call example:',
+    '```python',
+    'print("top level")',
+    '  if ready:',
+    '    print("nested")',
+    '```',
+    'ret'
+  ].join('\n'));
+
+  assert.equal(removeCommonIndent('    ```python\n  if ready:\n    print(1)\n    ```', 4),
+    '```python\nif ready:\n  print(1)\n```');
 });
 
 test('getDocumentSymbols builds a nested tree', () => {

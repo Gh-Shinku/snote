@@ -81,6 +81,93 @@ export function toggleTodoLine(raw: string): string | undefined {
   return `${prefix}[${checked ? ' ' : 'x'}]${rest}`;
 }
 
+export function getCopyLineRange(startLine: number, endLine: number, endCharacter: number): { start: number; end: number } {
+  return {
+    start: startLine,
+    end: endLine > startLine && endCharacter === 0 ? endLine - 1 : endLine
+  };
+}
+
+export function removeCommonIndent(text: string, tabSize: number): string {
+  tabSize = Math.max(1, Math.floor(tabSize));
+  const parts = text.split(/(\r\n|\n|\r)/);
+  const lines = parts.filter((_, index) => index % 2 === 0);
+  const codeGroups: number[][] = [];
+  const structuralLines: number[] = [];
+  let fenceLength = 0;
+  let codeGroup: number[] | undefined;
+
+  lines.forEach((line, index) => {
+    const nextFenceLength = getCodeFenceLengthAfterLine(line, fenceLength);
+    if (fenceLength > 0 && nextFenceLength > 0) {
+      if (codeGroup === undefined) {
+        codeGroup = [];
+        codeGroups.push(codeGroup);
+      }
+      codeGroup.push(index);
+    } else {
+      structuralLines.push(index);
+      codeGroup = undefined;
+    }
+    fenceLength = nextFenceLength;
+  });
+
+  const indentWidth = (line: string): number => {
+    let width = 0;
+    for (const character of line) {
+      if (character === ' ') {
+        width += 1;
+      } else if (character === '\t') {
+        width += tabSize - (width % tabSize);
+      } else {
+        break;
+      }
+    }
+    return width;
+  };
+
+  const minimumIndent = (indices: readonly number[]): number => {
+    const widths = indices.filter((index) => lines[index].trim().length > 0).map((index) => indentWidth(lines[index]));
+    const minimum = widths.reduce((current, width) => Math.min(current, width), Infinity);
+    return minimum === Infinity ? 0 : minimum;
+  };
+
+  const structuralIndent = minimumIndent(structuralLines);
+  const widths = lines.map(() => structuralIndent);
+  for (const group of codeGroups) {
+    const groupIndent = Math.min(structuralIndent, minimumIndent(group));
+    for (const index of group) {
+      widths[index] = groupIndent;
+    }
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim().length === 0) {
+      continue;
+    }
+    let removed = 0;
+    let offset = 0;
+    let remainingSpaces = '';
+    while (offset < lines[index].length && removed < widths[index]) {
+      const character = lines[index][offset];
+      const next = character === '\t' ? removed + tabSize - (removed % tabSize) : removed + 1;
+      if (character !== ' ' && character !== '\t') {
+        break;
+      }
+      if (next > widths[index]) {
+        remainingSpaces = ' '.repeat(next - widths[index]);
+        offset += 1;
+        break;
+      }
+      removed = next;
+      offset += 1;
+    }
+    parts[index * 2] = remainingSpaces + lines[index].slice(offset);
+  }
+
+  return parts.join('');
+}
+
 export interface DocumentSymbol {
   readonly name: string;
   readonly start: number;
