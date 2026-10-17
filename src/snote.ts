@@ -601,8 +601,9 @@ export function getFoldingRanges(text: string): FoldingRange[] {
 
     if (line.kind === 'ret') {
       const start = stack.pop();
-      if (start !== undefined && line.index > start) {
-        ranges.push({ start, end: line.index });
+      if (start !== undefined && line.index > start + 1) {
+        // Hide only the body so both call and its matching ret stay visible.
+        ranges.push({ start, end: line.index - 1 });
       }
     }
   }

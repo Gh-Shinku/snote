@@ -48,7 +48,7 @@ test('task blocks remain call lines with existing nesting, folding, formatting, 
   const text = ['call [ ] parent:', 'call normal:', 'call [X] child:', 'ret', 'ret', 'ret'].join('\n');
   assert.equal(parseLine('call [ ] parent:', 0).kind, 'call');
   assert.equal(isBalanced(text), true);
-  assert.deepEqual(getFoldingRanges(text), [{ start: 0, end: 5 }, { start: 1, end: 4 }, { start: 2, end: 3 }]);
+  assert.deepEqual(getFoldingRanges(text), [{ start: 0, end: 4 }, { start: 1, end: 3 }]);
   assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, [
     'call [ ] parent:', '  call normal:', '    call [X] child:', '    ret', '  ret', 'ret'
   ].join('\n'));
@@ -62,6 +62,7 @@ test('getFoldingRanges returns nested matched ranges', () => {
   const text = [
     'call outer:',
     '  call inner:',
+    '    detail',
     '  ret',
     'ret'
   ].join('\n');
@@ -75,14 +76,16 @@ test('getFoldingRanges returns nested matched ranges', () => {
 test('getFoldingRanges returns independent sibling ranges', () => {
   const text = [
     'call one:',
+    '  first detail',
     'ret',
     'call two:',
+    '  second detail',
     'ret'
   ].join('\n');
 
   assert.deepEqual(getFoldingRanges(text), [
     { start: 0, end: 1 },
-    { start: 2, end: 3 }
+    { start: 3, end: 4 }
   ]);
 });
 
@@ -91,6 +94,7 @@ test('getFoldingRanges ignores unmatched lines', () => {
     'ret',
     'call open:',
     'call closed:',
+    '  detail',
     'ret'
   ].join('\n');
 
@@ -113,10 +117,24 @@ test('getFoldingRanges includes code fences inside and beside call blocks', () =
   ].join('\n');
 
   assert.deepEqual(getFoldingRanges(text), [
-    { start: 0, end: 5 },
+    { start: 0, end: 4 },
     { start: 1, end: 4 },
     { start: 6, end: 8 }
   ]);
+});
+
+test('getFoldingRanges leaves empty call and task blocks without a fold', () => {
+  assert.deepEqual(getFoldingRanges('call empty:\nret\ncall [ ] empty task:\nret'), []);
+});
+
+test('getFoldingRanges hides even a blank body while preserving ret with any line ending', () => {
+  for (const separator of ['\n', '\r\n', '\r']) {
+    for (const body of ['  detail', '']) {
+      assert.deepEqual(getFoldingRanges(['call [ ] task:', body, 'ret'].join(separator)), [
+        { start: 0, end: 1 }
+      ]);
+    }
+  }
 });
 
 test('getFoldingRanges keeps a long fence open until a matching close', () => {

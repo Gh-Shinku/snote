@@ -130,6 +130,52 @@ async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 }
 
+async function checkCallFolding(): Promise<void> {
+  const document = await vscode.workspace.openTextDocument({
+    language: 'snote',
+    content: [
+      'call outer:',
+      '  call [ ] inner:',
+      '    detail',
+      '  ret',
+      'ret',
+      'call [x] sibling:',
+      '  detail',
+      'ret',
+      'call empty:',
+      'ret',
+      'call [ ] empty task:',
+      'ret'
+    ].join('\n')
+  });
+  const editor = await vscode.window.showTextDocument(document);
+  const ranges = await vscode.commands.executeCommand<vscode.FoldingRange[]>(
+    'vscode.executeFoldingRangeProvider', document.uri
+  );
+  assert.deepEqual(ranges?.map(({ start, end }) => ({ start, end })), [
+    { start: 0, end: 3 }, { start: 1, end: 2 }, { start: 5, end: 6 }
+  ]);
+  const visible = (line: number) => editor.visibleRanges.some((range) => range.contains(new vscode.Position(line, 0)));
+
+  await vscode.commands.executeCommand('editor.fold', { selectionLines: [1] });
+  await waitFor(() => !visible(2), 'inner task body is folded');
+  assert.ok(visible(1) && visible(3), 'inner call and ret remain visible');
+
+  await vscode.commands.executeCommand('editor.fold', { selectionLines: [0] });
+  await waitFor(() => !visible(1) && !visible(3), 'outer fold hides the entire nested block');
+  assert.ok(visible(0) && visible(4), 'outer call and ret remain visible');
+
+  await vscode.commands.executeCommand('editor.fold', { selectionLines: [5] });
+  await waitFor(() => !visible(6), 'sibling task body is folded');
+  assert.ok(visible(5) && visible(7), 'completed task call and ret remain visible');
+  assert.ok(visible(8) && visible(9) && visible(10) && visible(11), 'empty blocks remain two visible lines');
+
+  await vscode.commands.executeCommand('editor.unfold', { selectionLines: [0] });
+  await waitFor(() => visible(1) && visible(3), 'unfolding outer restores the nested boundaries');
+  assert.equal(visible(2), false, 'inner fold is preserved');
+  await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+}
+
 // Run with VS Code's --extensionTestsPath pointing at out/test/extension-host.
 export async function run(): Promise<void> {
   const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote');
@@ -226,6 +272,7 @@ export async function run(): Promise<void> {
     assert.deepEqual(provider.getChildren(), []);
     assert.ok(changes > 0, 'provider notifies the contributed view');
     await checkTaskBlocks(provider);
+    await checkCallFolding();
     console.log('SNote TODO Extension Development Host checks passed.');
   } finally {
     listener.dispose();

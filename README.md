@@ -45,7 +45,7 @@ as tasks without rewriting the file.
 ## Features
 
 - Syntax highlighting for `call`, titles, `:`, and `ret`
-- Folding for matched `call` / `ret` blocks
+- Folding for matched `call` / `ret` blocks hides the body while keeping both the `call` header and its matching `ret` visible. Empty blocks have no fold control. This also applies to task blocks.
 - Folding for fenced code blocks
 - Whole-document formatting using the editor indentation settings
 - Completion for ordinary `call` blocks and `call [ ]` task blocks
