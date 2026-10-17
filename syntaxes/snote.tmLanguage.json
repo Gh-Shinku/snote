@@ -13,6 +13,9 @@
       "include": "#todo"
     },
     {
+      "include": "#callTodo"
+    },
+    {
       "include": "#call"
     },
     {
@@ -568,6 +571,46 @@
           "captures": {
             "3": {
               "name": "punctuation.definition.todo.checked.snote"
+            }
+          }
+        }
+      ]
+    },
+    "callTodo": {
+      "patterns": [
+        {
+          "name": "meta.call.todo.unchecked.snote",
+          "match": "^(\\s*)(call)(\\s+)(\\[ \\])(\\s+)(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
+          "captures": {
+            "2": {
+              "name": "keyword.control.call.snote"
+            },
+            "4": {
+              "name": "punctuation.definition.todo.unchecked.snote"
+            },
+            "6": {
+              "name": "string.unquoted.title.snote"
+            },
+            "8": {
+              "name": "punctuation.definition.block.snote"
+            }
+          }
+        },
+        {
+          "name": "meta.call.todo.checked.snote",
+          "match": "^(\\s*)(call)(\\s+)(\\[[xX]\\])(\\s+)(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
+          "captures": {
+            "2": {
+              "name": "keyword.control.call.snote"
+            },
+            "4": {
+              "name": "punctuation.definition.todo.checked.snote"
+            },
+            "6": {
+              "name": "string.unquoted.title.snote"
+            },
+            "8": {
+              "name": "punctuation.definition.block.snote"
             }
           }
         }

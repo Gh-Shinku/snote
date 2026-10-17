@@ -12,6 +12,7 @@ import {
   getTodoCompletion,
   getTodoTree,
   isBalanced,
+  parseCallHeader,
   parseLine,
   removeCommonIndent,
   toggleTodoLine
@@ -21,6 +22,40 @@ test('parseLine identifies call, ret, and other lines', () => {
   assert.equal(parseLine('  call project title:', 0).kind, 'call');
   assert.equal(parseLine('  ret', 1).kind, 'ret');
   assert.equal(parseLine('  plain note', 2).kind, 'other');
+});
+
+test('parseCallHeader reads task titles and checkbox source positions', () => {
+  assert.deepEqual(parseCallHeader('\tcall\t[ ]\t修复登录 :  '), {
+    title: '修复登录', todo: { checked: false, markerStart: 6 }
+  });
+  for (const box of ['x', 'X']) {
+    assert.deepEqual(parseCallHeader(`  call [${box}] fix: login:`), {
+      title: 'fix: login', todo: { checked: true, markerStart: 7 }
+    });
+  }
+});
+
+test('parseCallHeader preserves ordinary call titles and rejects non-call lines', () => {
+  for (const title of ['project', '[y] invalid', '[ ]', '[ ]   ', '[x]no separator', 'prefix [ ] title']) {
+    assert.deepEqual(parseCallHeader(`call ${title}:`), { title });
+  }
+  for (const raw of ['- [ ] leaf', 'ret', 'call [ ] missing colon', 'call:', 'call :']) {
+    assert.equal(parseCallHeader(raw), undefined);
+  }
+});
+
+test('task blocks remain call lines with existing nesting, folding, formatting, and symbols', () => {
+  const text = ['call [ ] parent:', 'call normal:', 'call [X] child:', 'ret', 'ret', 'ret'].join('\n');
+  assert.equal(parseLine('call [ ] parent:', 0).kind, 'call');
+  assert.equal(isBalanced(text), true);
+  assert.deepEqual(getFoldingRanges(text), [{ start: 0, end: 5 }, { start: 1, end: 4 }, { start: 2, end: 3 }]);
+  assert.equal(formatDocument(text, { tabSize: 2, insertSpaces: true })?.text, [
+    'call [ ] parent:', '  call normal:', '    call [X] child:', '    ret', '  ret', 'ret'
+  ].join('\n'));
+  const symbols = getDocumentSymbols(text);
+  assert.equal(symbols[0].name, '[ ] parent');
+  assert.equal(symbols[0].children[0].children[0].name, '[X] child');
+  assert.equal(isBalanced('call [ ] unfinished:'), false);
 });
 
 test('getFoldingRanges returns nested matched ranges', () => {
@@ -181,6 +216,117 @@ test('toggleTodoLine returns undefined for non-todo lines', () => {
   assert.equal(toggleTodoLine('- [] empty'), undefined);
   assert.equal(toggleTodoLine('plain note'), undefined);
   assert.equal(toggleTodoLine('call task:'), undefined);
+});
+
+test('toggleTodoLine toggles only a task block checkbox and preserves all other text', () => {
+  const raw = '\t call\t [ ]\t fix: login  : \t';
+  const checked = '\t call\t [x]\t fix: login  : \t';
+  assert.equal(toggleTodoLine(raw), checked);
+  assert.equal(toggleTodoLine(checked), raw);
+  assert.equal(toggleTodoLine('call [X] completed:'), 'call [ ] completed:');
+  for (const raw of ['call project:', 'call [ ]:', 'call [ ]   :', 'call [y] invalid:', 'call [x]no separator:', 'call [ ] no colon']) {
+    assert.equal(toggleTodoLine(raw), undefined);
+  }
+});
+
+test('getTodoTree includes unfinished task blocks even without child tasks', () => {
+  assert.deepEqual(getTodoTree('call [ ] empty task:\nret\ncall [ ] open task:'), [
+    { kind: 'todo', title: 'empty task', line: 0, character: 0, children: [] },
+    { kind: 'todo', title: 'open task', line: 2, character: 0, children: [] }
+  ]);
+});
+
+test('getTodoTree nests mixed task blocks, ordinary calls, and single-line tasks without duplicates', () => {
+  const text = [
+    'call project:',
+    '  call [ ] parent:',
+    '    - [ ] leaf',
+    '    call notes:',
+    '      call [ ] child:',
+    '      ret',
+    '    ret',
+    '    call [x] completed child:',
+    '    ret',
+    '  ret',
+    'ret'
+  ].join('\n');
+  assert.deepEqual(getTodoTree(text), [{
+    kind: 'group', title: 'project', line: 0, character: 0,
+    children: [{
+      kind: 'todo', title: 'parent', line: 1, character: 2,
+      children: [
+        { kind: 'todo', title: 'leaf', line: 2, character: 4 },
+        {
+          kind: 'group', title: 'notes', line: 3, character: 4,
+          children: [{ kind: 'todo', title: 'child', line: 4, character: 6, children: [] }]
+        }
+      ]
+    }]
+  }]);
+});
+
+test('getTodoTree keeps completed ancestors only as context for unfinished descendants', () => {
+  for (const box of ['x', 'X']) {
+    const text = [
+      `call [${box}] parent:`,
+      '  call [X] intermediate:',
+      '    - [ ] unfinished',
+      '  ret',
+      '  - [x] finished',
+      'ret',
+      'call [x] hidden:',
+      '  call ordinary empty:',
+      '  ret',
+      'ret'
+    ].join('\n');
+    assert.deepEqual(getTodoTree(text), [{
+      kind: 'group', title: 'parent', line: 0, character: 0, completed: true,
+      children: [{
+        kind: 'group', title: 'intermediate', line: 1, character: 2, completed: true,
+        children: [{ kind: 'todo', title: 'unfinished', line: 2, character: 4 }]
+      }]
+    }]);
+  }
+});
+
+test('getTodoTree ignores task blocks inside code fences and preserves surrounding scope', () => {
+  const text = [
+    'call [ ] real:',
+    '````snote',
+    'ret',
+    'call [ ] fake:',
+    '```',
+    'call [ ] still fake:',
+    '````',
+    '  call [ ] child:',
+    '  ret',
+    'ret',
+    '```',
+    'call [ ] unclosed fence:'
+  ].join('\n');
+  assert.deepEqual(getTodoTree(text), [{
+    kind: 'todo', title: 'real', line: 0, character: 0,
+    children: [{ kind: 'todo', title: 'child', line: 7, character: 2, children: [] }]
+  }]);
+});
+
+test('task completion status changes visibility without changing scope or child state', () => {
+  const text = 'call [ ] parent:\n  - [ ] child\nret';
+  const completed = `${toggleTodoLine('call [ ] parent:')}\n  - [ ] child\nret`;
+  assert.deepEqual(getFoldingRanges(completed), getFoldingRanges(text));
+  assert.deepEqual(getTodoTree(completed), [{
+    kind: 'group', title: 'parent', line: 0, character: 0, completed: true,
+    children: [{ kind: 'todo', title: 'child', line: 1, character: 2 }]
+  }]);
+  assert.deepEqual(getTodoTree('call [x] done:\nret\ncall [X] also done:\nret'), []);
+});
+
+test('task blocks preserve positions across LF, CRLF, and CR documents', () => {
+  for (const separator of ['\n', '\r\n', '\r']) {
+    assert.deepEqual(getTodoTree(['ret', '\tcall [ ] 中文任务:', '\tret'].join(separator)), [
+      { kind: 'todo', title: '中文任务', line: 1, character: 1, children: [] }
+    ]);
+  }
 });
 
 test('getTodoTree returns only unfinished items with their source positions', () => {

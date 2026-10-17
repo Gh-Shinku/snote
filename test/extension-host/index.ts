@@ -13,6 +13,123 @@ async function waitFor(predicate: () => boolean, description: string): Promise<v
   }
 }
 
+async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
+  const completionDocument = await vscode.workspace.openTextDocument({ language: 'snote', content: 'c' });
+  const completionEditor = await vscode.window.showTextDocument(completionDocument);
+  let taskCompletion: vscode.CompletionItem | undefined;
+  for (const prefix of ['c', 'call']) {
+    if (completionDocument.getText() !== prefix) {
+      await completionEditor.edit((edit) => edit.replace(completionDocument.lineAt(0).range, prefix));
+    }
+    const completions = await vscode.commands.executeCommand<vscode.CompletionList>(
+      'vscode.executeCompletionItemProvider', completionDocument.uri, new vscode.Position(0, prefix.length)
+    );
+    assert.ok(completions);
+    const find = (label: string) => completions.items.find((item) =>
+      (typeof item.label === 'string' ? item.label : item.label.label) === label);
+    taskCompletion = find('call TODO block');
+    assert.ok(taskCompletion, `${prefix} offers task block completion`);
+    assert.notEqual(taskCompletion.preselect, true);
+    assert.equal(find('call block')?.preselect, true, 'ordinary call remains the default');
+  }
+  assert.ok(taskCompletion?.insertText instanceof vscode.SnippetString);
+  completionEditor.selection = new vscode.Selection(0, 0, 0, 4);
+  await vscode.commands.executeCommand('editor.action.insertSnippet', { snippet: taskCompletion.insertText.value });
+  assert.match(completionDocument.getText(), /^call \[ \] title:\r?\n[\t ]*\r?\nret$/);
+  await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+
+  const document = await vscode.workspace.openTextDocument({
+    language: 'snote',
+    content: [
+      'call project:',
+      '  call [ ] parent:',
+      '    notes',
+      '    - [ ] child',
+      '    call [X] completed parent:',
+      '      call [ ] nested:',
+      '        body',
+      '      ret',
+      '    ret',
+      '  ret',
+      '  call [x] hidden:',
+      '  ret',
+      '  call [ ] standalone:',
+      '  ret',
+      'ret',
+      '```snote',
+      'call [ ] literal:',
+      '- [ ] literal',
+      'ret',
+      '```'
+    ].join('\n')
+  });
+  const editor = await vscode.window.showTextDocument(document);
+  await waitFor(() => provider.getChildren()[0]?.node.title === 'project', 'task block hierarchy');
+  const project = provider.getChildren()[0];
+  const tasks = () => provider.getChildren(provider.getChildren()[0]);
+  assert.equal(tasks().length, 2, 'completed task without unfinished descendants is hidden');
+  const parent = tasks()[0];
+  assert.equal(parent.node.kind, 'todo');
+  assert.equal(provider.getTreeItem(parent).collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+  assert.equal(provider.getTreeItem(parent).label, 'parent');
+  const children = provider.getChildren(parent);
+  assert.equal(children.length, 2);
+  const completed = children[1];
+  assert.equal(provider.getTreeItem(completed).description, '已完成');
+  assert.equal(provider.getTreeItem(completed).command, undefined, 'completed parent is only context');
+  assert.equal(provider.getTreeItem(tasks()[1]).collapsibleState, vscode.TreeItemCollapsibleState.None);
+  assert.equal(provider.getChildren(project).length, 2, 'task appears once rather than as a duplicate child');
+
+  const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+    'vscode.executeDocumentSymbolProvider', document.uri
+  );
+  assert.equal(symbols?.[0].children[0].name, '[ ] parent');
+  assert.equal(symbols?.[0].children[0].children[0].name, '[X] completed parent');
+
+  await vscode.commands.executeCommand('vscode.executeFoldingRangeProvider', document.uri);
+  await vscode.commands.executeCommand('editor.foldAll');
+  await vscode.commands.executeCommand('snote.todoList.focus');
+  const command = provider.getTreeItem(provider.getChildren(completed)[0]).command;
+  assert.ok(command);
+  await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
+  assert.equal(editor.selection.active.line, 5);
+  await waitFor(() => editor.visibleRanges.some((range) => range.contains(new vscode.Position(5, 6))), 'nested task jump unfolds ancestors');
+
+  editor.selection = new vscode.Selection(1, 0, 1, 0);
+  await vscode.commands.executeCommand('snote.toggleTodo');
+  await waitFor(() => provider.getTreeItem(tasks()[0]).description === '已完成', 'completed parent becomes context');
+  assert.equal(document.lineAt(1).text, '  call [x] parent:');
+  assert.equal(document.lineAt(3).text, '    - [ ] child', 'toggling parent leaves child untouched');
+  assert.equal(document.lineAt(4).text, '    call [X] completed parent:', 'toggling parent preserves descendants');
+  await vscode.commands.executeCommand('undo');
+  await waitFor(() => tasks()[0].node.kind === 'todo', 'undo restores parent task');
+
+  editor.selection = new vscode.Selection(12, 0, 12, 0);
+  await vscode.commands.executeCommand('snote.toggleTodo');
+  await waitFor(() => tasks().length === 1, 'completed standalone task disappears');
+  await vscode.commands.executeCommand('undo');
+  await waitFor(() => tasks().length === 2, 'undo restores standalone task');
+
+  const before = document.getText();
+  editor.selections = [new vscode.Selection(16, 0, 16, 0), new vscode.Selection(17, 0, 17, 0)];
+  await vscode.commands.executeCommand('snote.toggleTodo');
+  assert.equal(document.getText(), before, 'neither task syntax can be toggled inside code');
+  const fencedCompletions = await vscode.commands.executeCommand<vscode.CompletionList>(
+    'vscode.executeCompletionItemProvider', document.uri, new vscode.Position(16, 1)
+  );
+  assert.ok(!fencedCompletions?.items.some((item) => item.label === 'call TODO block'));
+
+  await editor.edit((edit) => edit.insert(new vscode.Position(0, 0), '\n'));
+  await waitFor(() => tasks()[0].node.line === 2, 'unsaved task header position update');
+  const moved = provider.getTreeItem(tasks()[0]).command;
+  assert.ok(moved);
+  await vscode.commands.executeCommand(moved.command, ...(moved.arguments ?? []));
+  assert.equal(editor.selection.active.line, 2);
+  assert.equal(editor.selection.active.character, 2);
+  assert.equal(document.isDirty, true);
+  await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+}
+
 // Run with VS Code's --extensionTestsPath pointing at out/test/extension-host.
 export async function run(): Promise<void> {
   const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote');
@@ -108,6 +225,7 @@ export async function run(): Promise<void> {
     assert.equal(provider.description, undefined);
     assert.deepEqual(provider.getChildren(), []);
     assert.ok(changes > 0, 'provider notifies the contributed view');
+    await checkTaskBlocks(provider);
     console.log('SNote TODO Extension Development Host checks passed.');
   } finally {
     listener.dispose();

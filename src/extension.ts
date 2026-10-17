@@ -101,9 +101,7 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
 
   getChildren(element?: TodoTreeElement): TodoTreeElement[] {
     if (element !== undefined) {
-      return element.node.kind === 'group'
-        ? element.node.children.map((node) => ({ node, uri: element.uri }))
-        : [];
+      return (element.node.children ?? []).map((node) => ({ node, uri: element.uri }));
     }
     const document = this.document;
     return document === undefined ? [] : this.roots.map((node) => ({ node, uri: document.uri }));
@@ -113,12 +111,14 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
     const group = node.kind === 'group';
     const item = new vscode.TreeItem(
       node.title || '未命名 TODO',
-      group ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
+      node.children?.length ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
     );
     item.id = `${uri.toString()}:${node.kind}:${node.line}`;
-    item.iconPath = new vscode.ThemeIcon(group ? 'symbol-namespace' : 'circle-large-outline');
+    item.iconPath = new vscode.ThemeIcon(group ? (node.completed ? 'pass' : 'symbol-namespace') : 'circle-large-outline');
     item.tooltip = `${item.label}\n${uri.fsPath}:${node.line + 1}`;
-    if (!group) {
+    if (group && node.completed) {
+      item.description = '已完成';
+    } else if (!group) {
       item.description = `${node.line + 1}`;
       item.command = {
         command: 'snote.openTodo',
@@ -220,10 +220,7 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
 
     const items: vscode.CompletionItem[] = [];
 
-    const callItem = getCallCompletion(document, position);
-    if (callItem !== undefined) {
-      items.push(callItem);
-    }
+    items.push(...getCallCompletionItems(document, position));
 
     const todoItem = getTodoCompletionItem(document, position);
     if (todoItem !== undefined) {
@@ -282,24 +279,25 @@ function getFenceLengthBeforeLine(document: vscode.TextDocument, line: number): 
   return fenceLength;
 }
 
-function getCallCompletion(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {
+function getCallCompletionItems(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem[] {
   const range = getCurrentWordRange(document, position);
   const prefix = document.getText(range);
 
   if (prefix.length === 0 || !'call'.startsWith(prefix)) {
-    return undefined;
+    return [];
   }
 
-  const item = new vscode.CompletionItem('call block', vscode.CompletionItemKind.Snippet);
-  item.detail = 'SNote call/ret block';
-  item.documentation = 'Insert a nested SNote call block.';
-  item.filterText = 'call';
-  item.insertText = new vscode.SnippetString('call ${1:title}:\n\t${0}\nret');
-  item.preselect = true;
-  item.range = range;
-  item.sortText = '0000';
-
-  return item;
+  return [false, true].map((todo) => {
+    const item = new vscode.CompletionItem(todo ? 'call TODO block' : 'call block', vscode.CompletionItemKind.Snippet);
+    item.detail = todo ? 'SNote TODO call/ret block' : 'SNote call/ret block';
+    item.documentation = todo ? 'Insert a SNote task block with its own scope.' : 'Insert a nested SNote call block.';
+    item.filterText = 'call';
+    item.insertText = new vscode.SnippetString(`call ${todo ? '[ ] ' : ''}\${1:title}:\n\t\${0}\nret`);
+    item.preselect = !todo;
+    item.range = range;
+    item.sortText = todo ? '0001' : '0000';
+    return item;
+  });
 }
 
 function getTodoCompletionItem(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {
@@ -386,22 +384,25 @@ function toVscodeSymbol(symbol: DocumentSymbol, document: vscode.TextDocument): 
   return result;
 }
 
-function toggleTodoInEditor(editor: vscode.TextEditor): void {
+async function toggleTodoInEditor(editor: vscode.TextEditor): Promise<void> {
   const edit = new vscode.WorkspaceEdit();
   const handledLines = new Set<number>();
 
   for (const selection of editor.selections) {
     const line = editor.document.lineAt(selection.start.line);
+    if (handledLines.has(line.lineNumber) || getFenceLengthBeforeLine(editor.document, line.lineNumber) > 0) {
+      continue;
+    }
     const toggled = toggleTodoLine(line.text);
 
-    if (toggled !== undefined && !handledLines.has(line.lineNumber)) {
+    if (toggled !== undefined) {
       handledLines.add(line.lineNumber);
       edit.replace(editor.document.uri, line.range, toggled);
     }
   }
 
   if (handledLines.size > 0) {
-    void vscode.workspace.applyEdit(edit);
+    await vscode.workspace.applyEdit(edit);
   }
 }
 

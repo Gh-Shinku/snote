@@ -65,6 +65,31 @@ async function loadSnoteGrammar() {
   return grammar;
 }
 
+test('task block highlighting separates call, checkbox, title, and colon', async () => {
+  const grammar = await loadSnoteGrammar();
+  for (const box of [' ', 'x', 'X']) {
+    const raw = `  call [${box}] fix: login  :  `;
+    const { tokens } = grammar.tokenizeLine(raw, null);
+    const scopeAt = (offset: number) => tokens.find((token) => token.startIndex <= offset && token.endIndex > offset)!.scopes;
+    assert.ok(scopeAt(2).includes('keyword.control.call.snote'));
+    assert.ok(scopeAt(7).includes(`punctuation.definition.todo.${box === ' ' ? 'unchecked' : 'checked'}.snote`));
+    assert.ok(scopeAt(11).includes('string.unquoted.title.snote'));
+    assert.ok(scopeAt(raw.lastIndexOf(':')).includes('punctuation.definition.block.snote'));
+  }
+  for (const raw of ['call normal:', 'call [ ]:', 'call [ ]   :', 'call [y] invalid:', 'call [x]no separator:']) {
+    const { tokens } = grammar.tokenizeLine(raw, null);
+    assert.ok(tokens.some((token) => token.scopes.includes('keyword.control.call.snote')));
+    assert.ok(!tokens.some((token) => token.scopes.some((scope) => scope.startsWith('punctuation.definition.todo.'))));
+  }
+});
+
+test('task block highlighting is disabled inside fenced code', async () => {
+  const grammar = await loadSnoteGrammar();
+  const opening = grammar.tokenizeLine('```snote', null);
+  const literal = grammar.tokenizeLine('call [ ] literal:', opening.ruleStack);
+  assert.ok(!literal.tokens.some((token) => token.scopes.includes('punctuation.definition.todo.unchecked.snote')));
+});
+
 test('fenced code uses the named language grammar and stops at its closing fence', async () => {
   const grammar = await loadSnoteGrammar();
 

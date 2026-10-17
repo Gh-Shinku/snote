@@ -13,16 +13,45 @@ ret
 
 The language is a hierarchy of `call <title>:` and `ret` pairs.
 
+Add a checkbox after `call` to give a task its own scope:
+
+```snote
+call [ ] Fix login:
+  Refresh expired tokens before retrying requests.
+  - [ ] Add a regression test
+  call [x] Investigate the cause:
+    The refresh logic is missing.
+  ret
+ret
+```
+
+Task blocks accept `[ ]`, `[x]`, or `[X]` followed by whitespace and a nonempty
+title. They nest, fold, and format like ordinary `call` blocks. Use **call TODO
+block** completion when typing `c` or `call` to insert a task block. The ordinary
+**call block** suggestion remains the default.
+
+`Alt+Enter` toggles a task block's checkbox without changing its body or any
+child tasks; it also continues to toggle single-line `- [ ]` items. TODOs inside
+code fences are treated as code and cannot be toggled. Outline and breadcrumbs
+retain the checkbox in task block titles.
+
+The **SNote TODO** sidebar shows each unfinished task block once, with any child
+tasks beneath it. Click its title to jump to the block header. A completed task
+block is hidden unless it contains unfinished descendants, in which case its
+title remains as a context group marked **已完成**. Empty or invalid task markers
+remain ordinary `call` titles. Existing `call [ ] Title:` headings are interpreted
+as tasks without rewriting the file.
+
 ## Features
 
 - Syntax highlighting for `call`, titles, `:`, and `ret`
 - Folding for matched `call` / `ret` blocks
 - Folding for fenced code blocks
 - Whole-document formatting using the editor indentation settings
-- Completion for `call` blocks
+- Completion for ordinary `call` blocks and `call [ ]` task blocks
 - Completion for fenced code blocks: type one, two, or three backticks at the start of a line and accept the **code block** suggestion to insert a block with a language label and its closing fence. Inside a block, a backtick run that is too short for the opening fence offers the matching **close code block** suggestion. Marker, TODO, and `call` suggestions are suppressed inside code blocks, and inline code has no completion.
 - Auto-complete `- [ ]` TODO items: type `-` (or `- `) at the start of a line and accept the **TODO item** suggestion
-- Toggle `- [ ]` / `- [x]` with `Alt+Enter` (command: **SNote: Toggle TODO item**)
+- Toggle `- [ ]` / `- [x]` and `call [ ]` / `call [x]` with `Alt+Enter` (command: **SNote: Toggle TODO item**)
 - Browse unfinished TODOs in the Explorer sidebar's **SNote TODO** view, grouped by their `call` hierarchy. Click an item to jump to its source line, including inside folded blocks. The view follows the current SNote document and updates as you edit, toggle, or undo, including unsaved changes and untitled documents. Completed items and TODOs inside code fences are excluded; groups without unfinished items are hidden. Top-level TODOs appear at the root.
 - Copy the complete lines covered by a selection with their common indentation removed using **SNote: Copy Without Indentation** from the Command Palette. The command includes each line's leading whitespace even when the selection starts after it, and preserves nested indentation and indentation within fenced code.
 - Outline view and breadcrumbs showing the `call` block hierarchy

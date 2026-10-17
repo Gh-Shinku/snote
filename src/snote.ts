@@ -40,6 +40,26 @@ const retPattern = /^ret\s*$/;
 const todoPrefixPattern = /^(\s*)(-\s*)$/;
 const todoItemPattern = /^(\s*-\s+)\[([ xX])\](.*)$/;
 
+export interface CallHeader {
+  readonly title: string;
+  readonly todo?: {
+    readonly checked: boolean;
+    readonly markerStart: number;
+  };
+}
+
+export function parseCallHeader(raw: string): CallHeader | undefined {
+  if (!callPattern.test(raw.trim())) {
+    return undefined;
+  }
+
+  const match = /^(\s*call\s+)(.+):\s*$/.exec(raw)!;
+  const task = /^\[([ xX])\]\s+(\S(?:.*\S)?)\s*$/.exec(match[2]);
+  return task === null
+    ? { title: match[2] }
+    : { title: task[2], todo: { checked: task[1] !== ' ', markerStart: match[1].length } };
+}
+
 export function parseLine(raw: string, index: number): ParsedLine {
   const trimmed = raw.trim();
 
@@ -113,6 +133,12 @@ export function getTodoCompletion(linePrefix: string): TodoCompletion | undefine
 }
 
 export function toggleTodoLine(raw: string): string | undefined {
+  const header = parseCallHeader(raw);
+  if (header?.todo !== undefined) {
+    const { checked, markerStart } = header.todo;
+    return `${raw.slice(0, markerStart + 1)}${checked ? ' ' : 'x'}${raw.slice(markerStart + 2)}`;
+  }
+
   const match = todoItemPattern.exec(raw);
 
   if (!match) {
@@ -132,6 +158,7 @@ export interface TodoGroup {
   readonly line: number;
   readonly character: number;
   readonly children: TodoTreeNode[];
+  readonly completed?: boolean;
 }
 
 export interface TodoItem {
@@ -139,11 +166,12 @@ export interface TodoItem {
   readonly title: string;
   readonly line: number;
   readonly character: number;
+  readonly children?: TodoTreeNode[];
 }
 
 export function getTodoTree(text: string): TodoTreeNode[] {
   const roots: TodoTreeNode[] = [];
-  const stack: TodoGroup[] = [];
+  const stack: Array<TodoTreeNode & { children: TodoTreeNode[] }> = [];
   let fenceLength = 0;
 
   for (const line of parseDocument(text)) {
@@ -156,15 +184,18 @@ export function getTodoTree(text: string): TodoTreeNode[] {
 
     const children = stack.length > 0 ? stack[stack.length - 1].children : roots;
     if (line.kind === 'call') {
-      const group: TodoGroup = {
-        kind: 'group',
-        title: line.trimmed.replace(/^call\s+/, '').replace(/:\s*$/, ''),
+      const header = parseCallHeader(line.raw)!;
+      const block = {
+        title: header.title,
         line: line.index,
         character: line.raw.search(/\S/),
         children: []
       };
-      children.push(group);
-      stack.push(group);
+      const node: TodoTreeNode & { children: TodoTreeNode[] } = header.todo?.checked === false
+        ? { ...block, kind: 'todo' }
+        : { ...block, kind: 'group', ...(header.todo?.checked ? { completed: true } : {}) };
+      children.push(node);
+      stack.push(node);
     } else if (line.kind === 'ret') {
       stack.pop();
     } else {
@@ -183,7 +214,7 @@ export function getTodoTree(text: string): TodoTreeNode[] {
   const pruneEmptyGroups = (nodes: TodoTreeNode[]): TodoTreeNode[] => {
     return nodes.flatMap((node): TodoTreeNode[] => {
       if (node.kind === 'todo') {
-        return [node];
+        return [node.children === undefined ? node : { ...node, children: pruneEmptyGroups(node.children) }];
       }
       const children = pruneEmptyGroups(node.children);
       return children.length > 0 ? [{ ...node, children }] : [];
