@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   DocumentSymbol,
   RichTextKind,
+  getCodeFenceCompletion,
   getCodeFenceLengthAfterLine,
   getCopyLineRange,
   getDocumentSymbols,
@@ -80,6 +81,19 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
     document: vscode.TextDocument,
     position: vscode.Position
   ): vscode.ProviderResult<vscode.CompletionItem[]> {
+    const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
+    const fenceLength = getFenceLengthBeforeLine(document, position.line);
+    const fenceItem = getCodeFenceCompletionItem(position, linePrefix, fenceLength);
+
+    if (fenceItem !== undefined) {
+      return [fenceItem];
+    }
+
+    // Markers, TODO items, and `call` blocks are literal text inside a fence.
+    if (fenceLength > 0) {
+      return [];
+    }
+
     const items: vscode.CompletionItem[] = [];
 
     const callItem = getCallCompletion(document, position);
@@ -99,6 +113,47 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
 
     return items;
   }
+}
+
+function getCodeFenceCompletionItem(
+  position: vscode.Position,
+  linePrefix: string,
+  fenceLength: number
+): vscode.CompletionItem | undefined {
+  const completion = getCodeFenceCompletion(linePrefix, fenceLength);
+
+  if (completion === undefined) {
+    return undefined;
+  }
+
+  const opening = completion.kind === 'open';
+  const item = new vscode.CompletionItem(
+    opening ? 'code block' : 'close code block',
+    vscode.CompletionItemKind.Snippet
+  );
+  item.detail = opening ? 'SNote code block' : 'SNote code block end';
+  item.documentation = opening
+    ? 'Insert a fenced code block with a language label and a closing fence.'
+    : `Close the current code block with ${fenceLength} backticks.`;
+  item.filterText = linePrefix.trim();
+  item.insertText = completion.snippet
+    ? new vscode.SnippetString(completion.insertText)
+    : completion.insertText;
+  item.preselect = true;
+  item.range = new vscode.Range(position.line, completion.start, position.line, position.character);
+  item.sortText = '0000';
+
+  return item;
+}
+
+function getFenceLengthBeforeLine(document: vscode.TextDocument, line: number): number {
+  let fenceLength = 0;
+
+  for (let index = 0; index < line; index += 1) {
+    fenceLength = getCodeFenceLengthAfterLine(document.lineAt(index).text, fenceLength);
+  }
+
+  return fenceLength;
 }
 
 function getCallCompletion(document: vscode.TextDocument, position: vscode.Position): vscode.CompletionItem | undefined {

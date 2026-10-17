@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatDocument,
+  getCodeFenceCompletion,
   getCopyLineRange,
   getDocumentSymbols,
   getFormatLineEdits,
@@ -113,6 +114,52 @@ test('getTodoCompletion returns undefined outside todo context', () => {
   assert.equal(getTodoCompletion('-x'), undefined);
   assert.equal(getTodoCompletion('- [ ] done'), undefined);
   assert.equal(getTodoCompletion('call task:'), undefined);
+});
+
+test('getCodeFenceCompletion opens a fence at line start', () => {
+  assert.deepEqual(getCodeFenceCompletion('```', 0), {
+    kind: 'open',
+    start: 0,
+    insertText: '```${1:language}\n${0}\n```',
+    snippet: true
+  });
+});
+
+test('getCodeFenceCompletion keeps the indentation of an indented fence', () => {
+  assert.deepEqual(getCodeFenceCompletion('\t\t````', 0), {
+    kind: 'open',
+    start: 2,
+    insertText: '````${1:language}\n\t\t${0}\n\t\t````',
+    snippet: true
+  });
+});
+
+test('getCodeFenceCompletion ignores non-fence backticks', () => {
+  assert.equal(getCodeFenceCompletion('`', 0), undefined);
+  assert.equal(getCodeFenceCompletion('``', 0), undefined);
+  assert.equal(getCodeFenceCompletion('plain ```', 0), undefined);
+  assert.equal(getCodeFenceCompletion('```typescript', 0), undefined);
+  assert.equal(getCodeFenceCompletion('', 0), undefined);
+});
+
+test('getCodeFenceCompletion closes a longer fence', () => {
+  assert.deepEqual(getCodeFenceCompletion('```', 4), {
+    kind: 'close',
+    start: 0,
+    insertText: '````',
+    snippet: false
+  });
+  assert.deepEqual(getCodeFenceCompletion('  ```', 5), {
+    kind: 'close',
+    start: 2,
+    insertText: '`````',
+    snippet: false
+  });
+});
+
+test('getCodeFenceCompletion ignores fences that already close the block', () => {
+  assert.equal(getCodeFenceCompletion('```', 3), undefined);
+  assert.equal(getCodeFenceCompletion('`````', 3), undefined);
 });
 
 test('toggleTodoLine toggles unchecked and checked items', () => {

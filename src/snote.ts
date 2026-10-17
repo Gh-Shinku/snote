@@ -59,6 +59,45 @@ export interface TodoCompletion {
   readonly insertText: string;
 }
 
+export type CodeFenceCompletionKind = 'open' | 'close';
+
+export interface CodeFenceCompletion {
+  readonly kind: CodeFenceCompletionKind;
+  readonly start: number;
+  readonly insertText: string;
+  readonly snippet: boolean;
+}
+
+const codeFenceLinePattern = /^(\s*)(`{3,})$/;
+
+export function getCodeFenceCompletion(linePrefix: string, fenceLength: number): CodeFenceCompletion | undefined {
+  const match = codeFenceLinePattern.exec(linePrefix);
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const [, indent, ticks] = match;
+  const start = indent.length;
+
+  if (fenceLength > 0) {
+    // Only offer a closing fence when the typed run is too short to close the
+    // block: a run that already closes it needs no help from the editor.
+    if (ticks.length >= fenceLength) {
+      return undefined;
+    }
+
+    return { kind: 'close', start, insertText: '`'.repeat(fenceLength), snippet: false };
+  }
+
+  return {
+    kind: 'open',
+    start,
+    insertText: `${ticks}\${1:language}\n${indent}\${0}\n${indent}${ticks}`,
+    snippet: true
+  };
+}
+
 export function getTodoCompletion(linePrefix: string): TodoCompletion | undefined {
   const match = todoPrefixPattern.exec(linePrefix);
 
