@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import { basename } from 'node:path';
 import {
   DocumentSymbol,
   RichTextKind,
+  TodoTreeNode,
   getCodeFenceCompletion,
   getCodeFenceLengthAfterLine,
   getCopyLineRange,
@@ -10,6 +12,7 @@ import {
   getFoldingRanges,
   getRichTextSpansForLines,
   getTodoCompletion,
+  getTodoTree,
   removeCommonIndent,
   toggleTodoLine
 } from './snote';
@@ -21,8 +24,19 @@ const richTextRefreshDelayMs = 150;
 export function activate(context: vscode.ExtensionContext): void {
   const richTextDecorations = createRichTextDecorationTypes();
   const richTextDecorationManager = new SnoteRichTextDecorationManager(richTextDecorations);
+  const todoProvider = new SnoteTodoTreeProvider();
+  const todoView = vscode.window.createTreeView('snote.todoList', { treeDataProvider: todoProvider });
+  const updateTodoView = (): void => {
+    todoView.description = todoProvider.description;
+    todoView.message = todoProvider.message;
+  };
+  updateTodoView();
 
   context.subscriptions.push(
+    todoProvider,
+    todoView,
+    todoProvider.onDidChangeTreeData(updateTodoView),
+    vscode.commands.registerCommand('snote.openTodo', openTodo),
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
     vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`'),
@@ -44,6 +58,116 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {}
+
+interface TodoTreeElement {
+  readonly node: TodoTreeNode;
+  readonly uri: vscode.Uri;
+}
+
+export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeElement>, vscode.Disposable {
+  private readonly changeEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.changeEmitter.event;
+  private readonly subscriptions: vscode.Disposable[];
+  private document: vscode.TextDocument | undefined;
+  private roots: TodoTreeNode[] = [];
+
+  constructor() {
+    this.updateEditor(vscode.window.activeTextEditor);
+    this.subscriptions = [
+      vscode.window.onDidChangeActiveTextEditor((editor) => this.updateEditor(editor)),
+      vscode.workspace.onDidChangeTextDocument(({ document }) => {
+        if (document === this.document) {
+          this.setDocument(document.languageId === 'snote' ? document : undefined);
+        }
+      }),
+      vscode.workspace.onDidCloseTextDocument((document) => {
+        if (document === this.document) {
+          this.setDocument(undefined);
+        }
+      })
+    ];
+  }
+
+  get description(): string | undefined {
+    return this.document === undefined ? undefined : basename(this.document.uri.path);
+  }
+
+  get message(): string | undefined {
+    if (this.document === undefined) {
+      return '请打开一个 snote 文件以查看未完成的 TODO。';
+    }
+    return this.roots.length === 0 ? '没有未完成的 TODO' : undefined;
+  }
+
+  getChildren(element?: TodoTreeElement): TodoTreeElement[] {
+    if (element !== undefined) {
+      return element.node.kind === 'group'
+        ? element.node.children.map((node) => ({ node, uri: element.uri }))
+        : [];
+    }
+    const document = this.document;
+    return document === undefined ? [] : this.roots.map((node) => ({ node, uri: document.uri }));
+  }
+
+  getTreeItem({ node, uri }: TodoTreeElement): vscode.TreeItem {
+    const group = node.kind === 'group';
+    const item = new vscode.TreeItem(
+      node.title || '未命名 TODO',
+      group ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
+    );
+    item.id = `${uri.toString()}:${node.kind}:${node.line}`;
+    item.iconPath = new vscode.ThemeIcon(group ? 'symbol-namespace' : 'circle-large-outline');
+    item.tooltip = `${item.label}\n${uri.fsPath}:${node.line + 1}`;
+    if (!group) {
+      item.description = `${node.line + 1}`;
+      item.command = {
+        command: 'snote.openTodo',
+        title: '跳转到 TODO',
+        arguments: [uri, node.line, node.character]
+      };
+    }
+    return item;
+  }
+
+  dispose(): void {
+    for (const subscription of this.subscriptions) {
+      subscription.dispose();
+    }
+    this.changeEmitter.dispose();
+  }
+
+  private updateEditor(editor: vscode.TextEditor | undefined): void {
+    // Moving focus to a view can temporarily leave no active text editor.
+    if (editor === undefined) {
+      if (this.document?.isClosed) {
+        this.setDocument(undefined);
+      }
+      return;
+    }
+    this.setDocument(editor.document.languageId === 'snote' ? editor.document : undefined);
+  }
+
+  private setDocument(document: vscode.TextDocument | undefined): void {
+    this.document = document;
+    this.roots = document === undefined ? [] : getTodoTree(document.getText());
+    this.changeEmitter.fire();
+  }
+}
+
+async function openTodo(uri: vscode.Uri, line: number, character: number): Promise<void> {
+  const position = new vscode.Position(line, character);
+  const editor = await vscode.window.showTextDocument(uri, {
+    selection: new vscode.Range(position, position)
+  });
+  // Unfold every enclosing region, including nested blocks, without unfolding
+  // unrelated sections of the document.
+  await vscode.commands.executeCommand('editor.unfold', {
+    selectionLines: [line],
+    direction: 'up',
+    levels: editor.document.lineCount
+  });
+  editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+}
 
 class SnoteFoldingRangeProvider implements vscode.FoldingRangeProvider {
   provideFoldingRanges(document: vscode.TextDocument): vscode.ProviderResult<vscode.FoldingRange[]> {

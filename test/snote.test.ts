@@ -10,6 +10,7 @@ import {
   getRichTextSpans,
   getRichTextSpansForLines,
   getTodoCompletion,
+  getTodoTree,
   isBalanced,
   parseLine,
   removeCommonIndent,
@@ -180,6 +181,137 @@ test('toggleTodoLine returns undefined for non-todo lines', () => {
   assert.equal(toggleTodoLine('- [] empty'), undefined);
   assert.equal(toggleTodoLine('plain note'), undefined);
   assert.equal(toggleTodoLine('call task:'), undefined);
+});
+
+test('getTodoTree returns only unfinished items with their source positions', () => {
+  const text = [
+    '- [ ] first',
+    '  - [x] completed',
+    '- [X] also completed',
+    '\t- [ ] **second**  ',
+    '- [] invalid',
+    '* [ ] unsupported',
+    'plain - [ ] text',
+    '-[ ] invalid',
+    '- [ ]   '
+  ].join('\n');
+  assert.deepEqual(getTodoTree(text), [
+    { kind: 'todo', title: 'first', line: 0, character: 0 },
+    { kind: 'todo', title: '**second**', line: 3, character: 1 },
+    { kind: 'todo', title: '', line: 8, character: 0 }
+  ]);
+});
+
+test('getTodoTree preserves hierarchy and interleaved source order while pruning empty branches', () => {
+  const text = [
+    '- [ ] root before',
+    'call outer:',
+    '  - [ ] before child',
+    '  call empty:',
+    '    - [x] done',
+    '  ret',
+    '  call inner:',
+    '    - [ ] nested',
+    '  ret',
+    '  - [ ] after child',
+    'ret',
+    '- [ ] root after',
+    'call no tasks:',
+    '  call empty descendant:',
+    '  ret',
+    'ret'
+  ].join('\n');
+  assert.deepEqual(getTodoTree(text), [
+    { kind: 'todo', title: 'root before', line: 0, character: 0 },
+    {
+      kind: 'group', title: 'outer', line: 1, character: 0,
+      children: [
+        { kind: 'todo', title: 'before child', line: 2, character: 2 },
+        {
+          kind: 'group', title: 'inner', line: 6, character: 2,
+          children: [{ kind: 'todo', title: 'nested', line: 7, character: 4 }]
+        },
+        { kind: 'todo', title: 'after child', line: 9, character: 2 }
+      ]
+    },
+    { kind: 'todo', title: 'root after', line: 11, character: 0 }
+  ]);
+});
+
+test('getTodoTree retains ancestor groups and distinguishes duplicate group titles', () => {
+  const text = 'call same:\n  call same:\n    - [ ] nested\n  ret\nret\ncall same:\n- [ ] sibling\nret';
+  assert.deepEqual(getTodoTree(text), [
+    {
+      kind: 'group', title: 'same', line: 0, character: 0,
+      children: [{
+        kind: 'group', title: 'same', line: 1, character: 2,
+        children: [{ kind: 'todo', title: 'nested', line: 2, character: 4 }]
+      }]
+    },
+    {
+      kind: 'group', title: 'same', line: 5, character: 0,
+      children: [{ kind: 'todo', title: 'sibling', line: 6, character: 0 }]
+    }
+  ]);
+});
+
+test('getTodoTree ignores TODOs and structural markers in fenced code', () => {
+  const text = [
+    'call real:',
+    '  ````snote',
+    'ret',
+    'call fake:',
+    '- [ ] literal',
+    '```',
+    '- [ ] still literal',
+    '  `````',
+    '  - [ ] real task',
+    'ret',
+    '```',
+    '- [ ] also literal',
+    '```',
+    '- [ ] root task'
+  ].join('\n');
+  assert.deepEqual(getTodoTree(text), [
+    {
+      kind: 'group', title: 'real', line: 0, character: 0,
+      children: [{ kind: 'todo', title: 'real task', line: 8, character: 2 }]
+    },
+    { kind: 'todo', title: 'root task', line: 13, character: 0 }
+  ]);
+});
+
+test('getTodoTree ignores an unclosed fence through end of file', () => {
+  assert.deepEqual(getTodoTree('- [ ] before\n```js\n- [ ] literal\nret'), [
+    { kind: 'todo', title: 'before', line: 0, character: 0 }
+  ]);
+});
+
+test('getTodoTree tolerates unmatched ret and unclosed call blocks', () => {
+  assert.deepEqual(getTodoTree('ret\n- [ ] root\ncall open:\n  - [ ] child'), [
+    { kind: 'todo', title: 'root', line: 1, character: 0 },
+    {
+      kind: 'group', title: 'open', line: 2, character: 0,
+      children: [{ kind: 'todo', title: 'child', line: 3, character: 2 }]
+    }
+  ]);
+});
+
+test('getTodoTree supports LF, CRLF, and CR line endings', () => {
+  for (const separator of ['\n', '\r\n', '\r']) {
+    assert.deepEqual(getTodoTree(['call title:', '\t- [ ] 中文任务', 'ret', ''].join(separator)), [
+      {
+        kind: 'group', title: 'title', line: 0, character: 0,
+        children: [{ kind: 'todo', title: '中文任务', line: 1, character: 1 }]
+      }
+    ]);
+  }
+});
+
+test('getTodoTree returns no nodes for empty documents or completed branches', () => {
+  for (const text of ['', '\n', '- [x] done', 'call empty:\nret', 'call done:\n- [X] done\nret']) {
+    assert.deepEqual(getTodoTree(text), []);
+  }
 });
 
 test('removeCommonIndent preserves nested structure and line endings', () => {

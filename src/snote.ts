@@ -124,6 +124,75 @@ export function toggleTodoLine(raw: string): string | undefined {
   return `${prefix}[${checked ? ' ' : 'x'}]${rest}`;
 }
 
+export type TodoTreeNode = TodoGroup | TodoItem;
+
+export interface TodoGroup {
+  readonly kind: 'group';
+  readonly title: string;
+  readonly line: number;
+  readonly character: number;
+  readonly children: TodoTreeNode[];
+}
+
+export interface TodoItem {
+  readonly kind: 'todo';
+  readonly title: string;
+  readonly line: number;
+  readonly character: number;
+}
+
+export function getTodoTree(text: string): TodoTreeNode[] {
+  const roots: TodoTreeNode[] = [];
+  const stack: TodoGroup[] = [];
+  let fenceLength = 0;
+
+  for (const line of parseDocument(text)) {
+    const nextFenceLength = getCodeFenceLengthAfterLine(line.raw, fenceLength);
+    const insideFence = fenceLength > 0 || nextFenceLength > 0;
+    fenceLength = nextFenceLength;
+    if (insideFence) {
+      continue;
+    }
+
+    const children = stack.length > 0 ? stack[stack.length - 1].children : roots;
+    if (line.kind === 'call') {
+      const group: TodoGroup = {
+        kind: 'group',
+        title: line.trimmed.replace(/^call\s+/, '').replace(/:\s*$/, ''),
+        line: line.index,
+        character: line.raw.search(/\S/),
+        children: []
+      };
+      children.push(group);
+      stack.push(group);
+    } else if (line.kind === 'ret') {
+      stack.pop();
+    } else {
+      const match = todoItemPattern.exec(line.raw);
+      if (match !== null && match[2] === ' ') {
+        children.push({
+          kind: 'todo',
+          title: match[3].trim(),
+          line: line.index,
+          character: line.raw.search(/\S/)
+        });
+      }
+    }
+  }
+
+  const pruneEmptyGroups = (nodes: TodoTreeNode[]): TodoTreeNode[] => {
+    return nodes.flatMap((node): TodoTreeNode[] => {
+      if (node.kind === 'todo') {
+        return [node];
+      }
+      const children = pruneEmptyGroups(node.children);
+      return children.length > 0 ? [{ ...node, children }] : [];
+    });
+  };
+
+  return pruneEmptyGroups(roots);
+}
+
 export function getCopyLineRange(startLine: number, endLine: number, endCharacter: number): { start: number; end: number } {
   return {
     start: startLine,

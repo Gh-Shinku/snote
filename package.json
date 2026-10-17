@@ -17,6 +17,14 @@
   ],
   "main": "./out/src/extension.js",
   "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "snote.todoList",
+          "name": "SNote TODO"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "snote.toggleTodo",
