@@ -140,7 +140,9 @@ function getCodeFenceCompletionItem(
     ? new vscode.SnippetString(completion.insertText)
     : completion.insertText;
   item.preselect = true;
-  item.range = new vscode.Range(position.line, completion.start, position.line, position.character);
+  // Replace the whole line prefix, indentation included: the snippet supplies
+  // its own indentation so the closing fence stays aligned.
+  item.range = new vscode.Range(position.line, 0, position.line, position.character);
   item.sortText = '0000';
 
   return item;
@@ -240,8 +242,6 @@ function getRichTextCompletionDefinition(
         insertText: '~~${1:text}~~',
         sortText: '0002'
       };
-    case '`':
-      return { label: 'inline code', documentation: 'Insert inline code.', insertText: '`${1:code}`', sortText: '0002' };
     default:
       return undefined;
   }

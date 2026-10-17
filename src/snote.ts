@@ -63,12 +63,12 @@ export type CodeFenceCompletionKind = 'open' | 'close';
 
 export interface CodeFenceCompletion {
   readonly kind: CodeFenceCompletionKind;
-  readonly start: number;
   readonly insertText: string;
   readonly snippet: boolean;
 }
 
-const codeFenceLinePattern = /^(\s*)(`{3,})$/;
+const codeFenceLinePattern = /^(\s*)(`{1,})$/;
+const minimumCodeFenceLength = 3;
 
 export function getCodeFenceCompletion(linePrefix: string, fenceLength: number): CodeFenceCompletion | undefined {
   const match = codeFenceLinePattern.exec(linePrefix);
@@ -78,7 +78,6 @@ export function getCodeFenceCompletion(linePrefix: string, fenceLength: number):
   }
 
   const [, indent, ticks] = match;
-  const start = indent.length;
 
   if (fenceLength > 0) {
     // Only offer a closing fence when the typed run is too short to close the
@@ -87,13 +86,18 @@ export function getCodeFenceCompletion(linePrefix: string, fenceLength: number):
       return undefined;
     }
 
-    return { kind: 'close', start, insertText: '`'.repeat(fenceLength), snippet: false };
+    return { kind: 'close', insertText: `${indent}${'`'.repeat(fenceLength)}`, snippet: false };
   }
 
+  const fence = '`'.repeat(Math.max(ticks.length, minimumCodeFenceLength));
+
+  // The replacement covers the whole line prefix, including its indentation,
+  // because editors may prepend the current line indentation to every snippet
+  // line after the first: emitting the indentation explicitly here keeps the
+  // closing fence aligned instead of double indented.
   return {
     kind: 'open',
-    start,
-    insertText: `${ticks}\${1:language}\n${indent}\${0}\n${indent}${ticks}`,
+    insertText: `${indent}${fence}\${1:language}\n${indent}\${0}\n${indent}${fence}`,
     snippet: true
   };
 }

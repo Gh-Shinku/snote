@@ -20,7 +20,7 @@ The language is a hierarchy of `call <title>:` and `ret` pairs.
 - Folding for fenced code blocks
 - Whole-document formatting using the editor indentation settings
 - Completion for `call` blocks
-- Completion for fenced code blocks: type ``` at the start of a line and accept the **code block** suggestion to insert a block with a language label and its closing fence. Inside a block, a backtick run that is too short for the opening fence offers the matching **close code block** suggestion. Marker, TODO, and `call` suggestions are suppressed inside code blocks.
+- Completion for fenced code blocks: type one, two, or three backticks at the start of a line and accept the **code block** suggestion to insert a block with a language label and its closing fence. Inside a block, a backtick run that is too short for the opening fence offers the matching **close code block** suggestion. Marker, TODO, and `call` suggestions are suppressed inside code blocks, and inline code has no completion.
 - Auto-complete `- [ ]` TODO items: type `-` (or `- `) at the start of a line and accept the **TODO item** suggestion
 - Toggle `- [ ]` / `- [x]` with `Alt+Enter` (command: **SNote: Toggle TODO item**)
 - Copy the complete lines covered by a selection with their common indentation removed using **SNote: Copy Without Indentation** from the Command Palette. The command includes each line's leading whitespace even when the selection starts after it, and preserves nested indentation and indentation within fenced code.
