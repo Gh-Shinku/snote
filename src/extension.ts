@@ -36,6 +36,13 @@ export function activate(context: vscode.ExtensionContext): void {
     todoProvider,
     todoView,
     todoProvider.onDidChangeTreeData(updateTodoView),
+    todoView.onDidChangeVisibility(({ visible }) => {
+      if (visible) {
+        // The tree is created lazily on first expansion. Reapply its state now
+        // so VS Code lays it out without waiting for its delayed message update.
+        updateTodoView();
+      }
+    }),
     vscode.commands.registerCommand('snote.openTodo', openTodo),
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
