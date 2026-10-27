@@ -21,12 +21,14 @@ const languageSelector: vscode.DocumentSelector = { language: 'snote' };
 const richTextKinds: RichTextKind[] = ['bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
 const richTextRefreshDelayMs = 150;
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): { todoView: vscode.TreeView<TodoTreeElement> } {
   const richTextDecorations = createRichTextDecorationTypes();
   const richTextDecorationManager = new SnoteRichTextDecorationManager(richTextDecorations);
   const todoProvider = new SnoteTodoTreeProvider();
   const todoView = vscode.window.createTreeView('snote.todoList', { treeDataProvider: todoProvider });
   const updateTodoView = (): void => {
+    // View conditions use the workbench context, not an editor's scoped keys.
+    void vscode.commands.executeCommand('setContext', 'snote.hasActiveDocument', todoProvider.hasDocument);
     todoView.description = todoProvider.description;
     todoView.message = todoProvider.message;
   };
@@ -62,6 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   richTextDecorationManager.updateEditors(vscode.window.visibleTextEditors);
+  return { todoView };
 }
 
 export function deactivate(): void {}
@@ -82,6 +85,8 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
     this.updateEditor(vscode.window.activeTextEditor);
     this.subscriptions = [
       vscode.window.onDidChangeActiveTextEditor((editor) => this.updateEditor(editor)),
+      vscode.window.tabGroups.onDidChangeTabs(() => this.updateEditor(vscode.window.activeTextEditor)),
+      vscode.window.tabGroups.onDidChangeTabGroups(() => this.updateEditor(vscode.window.activeTextEditor)),
       vscode.workspace.onDidChangeTextDocument(({ document }) => {
         if (document === this.document) {
           this.setDocument(document.languageId === 'snote' ? document : undefined);
@@ -97,6 +102,10 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
 
   get description(): string | undefined {
     return this.document === undefined ? undefined : basename(this.document.uri.path);
+  }
+
+  get hasDocument(): boolean {
+    return this.document !== undefined;
   }
 
   get message(): string | undefined {
@@ -144,9 +153,12 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
   }
 
   private updateEditor(editor: vscode.TextEditor | undefined): void {
-    // Moving focus to a view can temporarily leave no active text editor.
+    // Sidebar focus can leave no active text editor while its text tab stays
+    // selected. A webview or no selected tab must clear the document instead.
     if (editor === undefined) {
-      if (this.document?.isClosed) {
+      const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+      if (this.document?.isClosed || !(input instanceof vscode.TabInputText)
+        || input.uri.toString() !== this.document?.uri.toString()) {
         this.setDocument(undefined);
       }
       return;

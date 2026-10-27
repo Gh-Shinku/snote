@@ -22,7 +22,7 @@
         {
           "id": "snote.todoList",
           "name": "SNote TODO",
-          "when": "editorLangId == snote"
+          "when": "snote.hasActiveDocument"
         }
       ]
     },

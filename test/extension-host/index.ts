@@ -180,7 +180,7 @@ async function checkCallFolding(): Promise<void> {
 export async function run(): Promise<void> {
   const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote');
   assert.ok(extension, 'SNote is installed in the Extension Development Host');
-  await extension.activate();
+  const { todoView } = await extension.activate() as { todoView: vscode.TreeView<unknown> };
   const provider = new SnoteTodoTreeProvider();
   let changes = 0;
   const listener = provider.onDidChangeTreeData(() => { changes += 1; });
@@ -207,6 +207,7 @@ export async function run(): Promise<void> {
     await vscode.commands.executeCommand('vscode.executeFoldingRangeProvider', document.uri);
     await vscode.commands.executeCommand('editor.foldAll');
     await vscode.commands.executeCommand('snote.todoList.focus');
+    await waitFor(() => todoView.visible, 'SNote TODO view is visible with sidebar focus');
     assert.equal(provider.getChildren().length, 2, 'view focus retains the document');
     const command = provider.getTreeItem(todo).command;
     assert.ok(command);
@@ -241,8 +242,25 @@ export async function run(): Promise<void> {
     const plain = await vscode.workspace.openTextDocument({ language: 'plaintext', content: '- [ ] ignored' });
     await vscode.window.showTextDocument(plain);
     await waitFor(() => provider.description === undefined, 'non-SNote clears the view');
+    await waitFor(() => !todoView.visible, 'non-SNote hides the contributed view');
     assert.deepEqual(provider.getChildren(), []);
     assert.equal(provider.message, 'Open a SNote file to view unfinished TODOs.');
+
+    await vscode.window.showTextDocument(document);
+    await waitFor(() => todoView.visible, 'returning to SNote restores the contributed view');
+    await vscode.commands.executeCommand('snote.todoList.focus');
+    await waitFor(() => todoView.visible, 'sidebar focus keeps the SNote view visible');
+    const panel = vscode.window.createWebviewPanel('snote.test', 'Non-text page', vscode.ViewColumn.One);
+    try {
+      await waitFor(() => !todoView.visible, 'a non-text page hides the contributed view');
+      assert.deepEqual(provider.getChildren(), []);
+    } finally {
+      panel.dispose();
+    }
+    await vscode.window.showTextDocument(document);
+    await waitFor(() => todoView.visible, 'returning from a non-text page restores the view');
+    await vscode.window.showTextDocument(plain);
+    await waitFor(() => !todoView.visible, 'switching away hides the contributed view again');
 
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'snote-todo-host-'));
     const fixturePath = join(fixtureDirectory, 'saved.snote');
@@ -251,6 +269,7 @@ export async function run(): Promise<void> {
       const saved = await vscode.workspace.openTextDocument(vscode.Uri.file(fixturePath));
       const savedEditor = await vscode.window.showTextDocument(saved);
       await waitFor(() => provider.description === 'saved.snote', 'saved SNote file');
+      await waitFor(() => todoView.visible, 'saved SNote file shows the contributed view');
       assert.equal(provider.getTreeItem(provider.getChildren()[0]).label, 'saved task');
       await savedEditor.edit((edit) => edit.replace(saved.lineAt(0).range, '- [ ] edited without saving'));
       await waitFor(
@@ -260,6 +279,7 @@ export async function run(): Promise<void> {
       assert.equal(saved.isDirty, true);
       await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
       await waitFor(() => provider.description === undefined, 'closed saved file clears view');
+      await waitFor(() => !todoView.visible, 'closing SNote and returning to plain text hides the view');
     } finally {
       await unlink(fixturePath);
       await rmdir(fixtureDirectory);
@@ -274,6 +294,12 @@ export async function run(): Promise<void> {
     assert.ok(changes > 0, 'provider notifies the contributed view');
     await checkTaskBlocks(provider);
     await checkCallFolding();
+    while (vscode.window.tabGroups.activeTabGroup.activeTab !== undefined) {
+      const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+      await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+      await waitFor(() => vscode.window.tabGroups.activeTabGroup.activeTab !== tab, 'test editor closes');
+    }
+    await waitFor(() => !todoView.visible, 'no active editor hides the contributed view');
     console.log('SNote TODO Extension Development Host checks passed.');
   } finally {
     listener.dispose();
