@@ -101,9 +101,9 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
 
   get message(): string | undefined {
     if (this.document === undefined) {
-      return '请打开一个 snote 文件以查看未完成的 TODO。';
+      return 'Open a SNote file to view unfinished TODOs.';
     }
-    return this.roots.length === 0 ? '没有未完成的 TODO' : undefined;
+    return this.roots.length === 0 ? 'No unfinished TODOs' : undefined;
   }
 
   getChildren(element?: TodoTreeElement): TodoTreeElement[] {
@@ -117,19 +117,19 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
   getTreeItem({ node, uri }: TodoTreeElement): vscode.TreeItem {
     const group = node.kind === 'group';
     const item = new vscode.TreeItem(
-      node.title || '未命名 TODO',
+      node.title || 'Untitled TODO',
       node.children?.length ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None
     );
     item.id = `${uri.toString()}:${node.kind}:${node.line}`;
     item.iconPath = new vscode.ThemeIcon(group ? (node.completed ? 'pass' : 'symbol-namespace') : 'circle-large-outline');
     item.tooltip = `${item.label}\n${uri.fsPath}:${node.line + 1}`;
     if (group && node.completed) {
-      item.description = '已完成';
+      item.description = 'Completed';
     } else if (!group) {
       item.description = `${node.line + 1}`;
       item.command = {
         command: 'snote.openTodo',
-        title: '跳转到 TODO',
+        title: 'Go to TODO',
         arguments: [uri, node.line, node.character]
       };
     }

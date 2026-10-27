@@ -75,7 +75,7 @@ async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
   const children = provider.getChildren(parent);
   assert.equal(children.length, 2);
   const completed = children[1];
-  assert.equal(provider.getTreeItem(completed).description, '已完成');
+  assert.equal(provider.getTreeItem(completed).description, 'Completed');
   assert.equal(provider.getTreeItem(completed).command, undefined, 'completed parent is only context');
   assert.equal(provider.getTreeItem(tasks()[1]).collapsibleState, vscode.TreeItemCollapsibleState.None);
   assert.equal(provider.getChildren(project).length, 2, 'task appears once rather than as a duplicate child');
@@ -97,7 +97,7 @@ async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
 
   editor.selection = new vscode.Selection(1, 0, 1, 0);
   await vscode.commands.executeCommand('snote.toggleTodo');
-  await waitFor(() => provider.getTreeItem(tasks()[0]).description === '已完成', 'completed parent becomes context');
+  await waitFor(() => provider.getTreeItem(tasks()[0]).description === 'Completed', 'completed parent becomes context');
   assert.equal(document.lineAt(1).text, '  call [x] parent:');
   assert.equal(document.lineAt(3).text, '    - [ ] child', 'toggling parent leaves child untouched');
   assert.equal(document.lineAt(4).text, '    call [X] completed parent:', 'toggling parent preserves descendants');
@@ -200,7 +200,7 @@ export async function run(): Promise<void> {
     assert.equal(provider.getTreeItem(outer).collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
     assert.equal(provider.getTreeItem(todo).label, 'first');
     assert.equal(provider.getTreeItem(todo).description, '3');
-    assert.equal(provider.getTreeItem(provider.getChildren()[1]).label, '未命名 TODO');
+    assert.equal(provider.getTreeItem(provider.getChildren()[1]).label, 'Untitled TODO');
 
     // Focus the real contributed view and use exactly the command assigned to
     // its item. The target is initially hidden inside two collapsed regions.
@@ -210,6 +210,7 @@ export async function run(): Promise<void> {
     assert.equal(provider.getChildren().length, 2, 'view focus retains the document');
     const command = provider.getTreeItem(todo).command;
     assert.ok(command);
+    assert.equal(command.title, 'Go to TODO');
     await vscode.commands.executeCommand(command.command, ...(command.arguments ?? []));
     await waitFor(() => vscode.window.activeTextEditor?.selection.active.line === 2, 'TODO selection');
     assert.equal(vscode.window.activeTextEditor?.document, document);
@@ -235,13 +236,13 @@ export async function run(): Promise<void> {
     await vscode.window.showTextDocument(second);
     await waitFor(() => provider.description === second.uri.path.split('/').pop(), 'second SNote document');
     assert.deepEqual(provider.getChildren(), []);
-    assert.equal(provider.message, '没有未完成的 TODO');
+    assert.equal(provider.message, 'No unfinished TODOs');
 
     const plain = await vscode.workspace.openTextDocument({ language: 'plaintext', content: '- [ ] ignored' });
     await vscode.window.showTextDocument(plain);
     await waitFor(() => provider.description === undefined, 'non-SNote clears the view');
     assert.deepEqual(provider.getChildren(), []);
-    assert.match(provider.message ?? '', /打开.*snote/);
+    assert.equal(provider.message, 'Open a SNote file to view unfinished TODOs.');
 
     const fixtureDirectory = await mkdtemp(join(tmpdir(), 'snote-todo-host-'));
     const fixturePath = join(fixtureDirectory, 'saved.snote');

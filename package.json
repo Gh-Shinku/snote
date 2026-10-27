@@ -21,7 +21,8 @@
       "explorer": [
         {
           "id": "snote.todoList",
-          "name": "SNote TODO"
+          "name": "SNote TODO",
+          "when": "editorLangId == snote"
         }
       ]
     },
