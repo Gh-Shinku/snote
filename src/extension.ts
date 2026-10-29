@@ -4,6 +4,9 @@ import {
   DocumentSymbol,
   RichTextKind,
   TodoTreeNode,
+  getAsideCompletion,
+  getAsideLines,
+  getAsideMarkerStart,
   getCodeFenceCompletion,
   getCodeFenceLengthAfterLine,
   getCopyLineRange,
@@ -18,7 +21,8 @@ import {
 } from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
-const richTextKinds: RichTextKind[] = ['bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
+type DecorationKind = RichTextKind | 'aside' | 'asideMarker';
+const decorationKinds: DecorationKind[] = ['aside', 'asideMarker', 'bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
 const richTextRefreshDelayMs = 150;
 
 export function activate(context: vscode.ExtensionContext): { todoView: vscode.TreeView<TodoTreeElement> } {
@@ -48,11 +52,12 @@ export function activate(context: vscode.ExtensionContext): { todoView: vscode.T
     vscode.commands.registerCommand('snote.openTodo', openTodo),
     vscode.languages.registerFoldingRangeProvider(languageSelector, new SnoteFoldingRangeProvider()),
     vscode.languages.registerDocumentFormattingEditProvider(languageSelector, new SnoteDocumentFormattingProvider()),
-    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`'),
+    vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`', '>'),
     vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
     vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor),
     vscode.commands.registerTextEditorCommand('snote.copyWithoutIndentation', copyWithoutIndentation),
     vscode.window.onDidChangeVisibleTextEditors((editors) => richTextDecorationManager.updateEditors(editors)),
+    vscode.window.onDidChangeTextEditorVisibleRanges(({ textEditor }) => richTextDecorationManager.updateEditors([textEditor])),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       if (editor !== undefined) {
         richTextDecorationManager.updateEditors([editor]);
@@ -239,11 +244,25 @@ class SnoteCompletionItemProvider implements vscode.CompletionItemProvider {
 
     const items: vscode.CompletionItem[] = [];
 
-    items.push(...getCallCompletionItems(document, position));
+    const aside = getAsideCompletion(linePrefix);
+    if (aside !== undefined) {
+      const item = new vscode.CompletionItem('aside', vscode.CompletionItemKind.Snippet);
+      item.detail = 'SNote aside';
+      item.documentation = 'Insert a `> ` aside. Prefix each additional aside line with `> `.';
+      item.filterText = '>';
+      item.insertText = aside.insertText;
+      item.range = new vscode.Range(position.line, aside.start, position.line, position.character);
+      item.preselect = true;
+      item.sortText = '0000';
+      items.push(item);
+    }
 
-    const todoItem = getTodoCompletionItem(document, position);
-    if (todoItem !== undefined) {
-      items.push(todoItem);
+    if (getAsideMarkerStart(linePrefix) === undefined) {
+      items.push(...getCallCompletionItems(document, position));
+      const todoItem = getTodoCompletionItem(document, position);
+      if (todoItem !== undefined) {
+        items.push(todoItem);
+      }
     }
 
     const richTextItem = getRichTextCompletion(document, position);
@@ -450,7 +469,7 @@ function getCurrentWordRange(document: vscode.TextDocument, position: vscode.Pos
   return new vscode.Range(position.line, position.character - currentWord.length, position.line, position.character);
 }
 
-type RichTextDecorationTypes = Record<RichTextKind, vscode.TextEditorDecorationType>;
+type RichTextDecorationTypes = Record<DecorationKind, vscode.TextEditorDecorationType>;
 
 class SnoteRichTextDecorationManager {
   private readonly pendingEditors = new Set<vscode.TextEditor>();
@@ -491,7 +510,7 @@ class SnoteRichTextDecorationManager {
     const visibleLineRanges = getVisibleLineRanges(editor);
 
     if (visibleLineRanges.length === 0) {
-      for (const kind of richTextKinds) {
+      for (const kind of decorationKinds) {
         editor.setDecorations(this.decorations[kind], ranges[kind]);
       }
       return;
@@ -513,6 +532,10 @@ class SnoteRichTextDecorationManager {
       for (const span of getRichTextSpansForLines(lines, visibleRange.start, fenceLength)) {
         ranges[span.kind].push(new vscode.Range(span.line, span.start, span.line, span.end));
       }
+      for (const aside of getAsideLines(lines, visibleRange.start, fenceLength)) {
+        ranges.aside.push(new vscode.Range(aside.line, 0, aside.line, aside.end));
+        ranges.asideMarker.push(new vscode.Range(aside.line, aside.markerStart, aside.line, aside.markerStart + 1));
+      }
 
       for (const line of lines) {
         fenceLength = getCodeFenceLengthAfterLine(line, fenceLength);
@@ -520,13 +543,13 @@ class SnoteRichTextDecorationManager {
       nextLine = visibleRange.end + 1;
     }
 
-    for (const kind of richTextKinds) {
+    for (const kind of decorationKinds) {
       editor.setDecorations(this.decorations[kind], ranges[kind]);
     }
   }
 
   private clearEditor(editor: vscode.TextEditor): void {
-    for (const kind of richTextKinds) {
+    for (const kind of decorationKinds) {
       editor.setDecorations(this.decorations[kind], []);
     }
   }
@@ -566,6 +589,16 @@ function getVisibleLineRanges(editor: vscode.TextEditor): Array<{ start: number;
 
 function createRichTextDecorationTypes(): RichTextDecorationTypes {
   return {
+    aside: vscode.window.createTextEditorDecorationType({
+      isWholeLine: true,
+      backgroundColor: new vscode.ThemeColor('textBlockQuote.background'),
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
+    asideMarker: vscode.window.createTextEditorDecorationType({
+      color: new vscode.ThemeColor('textLink.foreground'),
+      fontWeight: 'bold',
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
     bold: vscode.window.createTextEditorDecorationType({
       fontWeight: 'bold',
       rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
@@ -593,8 +626,10 @@ function createRichTextDecorationTypes(): RichTextDecorationTypes {
   };
 }
 
-function createRichTextDecorationRanges(): Record<RichTextKind, vscode.Range[]> {
+function createRichTextDecorationRanges(): Record<DecorationKind, vscode.Range[]> {
   return {
+    aside: [],
+    asideMarker: [],
     bold: [],
     italic: [],
     boldItalic: [],

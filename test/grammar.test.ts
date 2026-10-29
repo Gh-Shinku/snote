@@ -65,6 +65,31 @@ async function loadSnoteGrammar() {
   return grammar;
 }
 
+test('aside highlighting marks each line and preserves inline rich text without structural tokens', async () => {
+  const grammar = await loadSnoteGrammar();
+  let stack: StateStack | null = null;
+  for (const raw of ['  > **bold** and *italic* and `code`', '> call [ ] task:', '> ret', '> - [ ] task', '>']) {
+    const result = grammar.tokenizeLine(raw, stack);
+    stack = result.ruleStack;
+    assert.ok(result.tokens.some((token) => token.scopes.includes('punctuation.definition.aside.snote')));
+    assert.ok(!result.tokens.some((token) => token.scopes.some((scope) =>
+      scope.startsWith('keyword.control.') || scope.startsWith('punctuation.definition.todo.'))));
+    if (raw.includes('bold')) {
+      for (const scope of ['markup.bold.snote', 'markup.italic.snote', 'markup.inline.raw.snote']) {
+        assert.ok(result.tokens.some((token) => token.scopes.includes(scope)), scope);
+      }
+    }
+  }
+  for (const raw of ['body', '>> text', '>text', 'body > text', 'ret']) {
+    const result = grammar.tokenizeLine(raw, stack);
+    stack = result.ruleStack;
+    assert.ok(!result.tokens.some((token) => token.scopes.includes('meta.aside.snote')));
+  }
+  const opened = grammar.tokenizeLine('```snote', null);
+  const code = grammar.tokenizeLine('> question', opened.ruleStack);
+  assert.ok(!code.tokens.some((token) => token.scopes.includes('meta.aside.snote')));
+});
+
 test('task block highlighting separates call, checkbox, title, and colon', async () => {
   const grammar = await loadSnoteGrammar();
   for (const box of [' ', 'x', 'X']) {

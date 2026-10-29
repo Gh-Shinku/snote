@@ -4,6 +4,9 @@
   "scopeName": "source.snote",
   "patterns": [
     {
+      "include": "#aside"
+    },
+    {
       "include": "#richText"
     },
     {
@@ -20,6 +23,15 @@
     }
   ],
   "repository": {
+    "aside": {
+      "name": "meta.aside.snote",
+      "begin": "^[ \\t]*(>)(?=[ \\t]|$)",
+      "end": "$",
+      "beginCaptures": {
+        "1": { "name": "punctuation.definition.aside.snote" }
+      },
+      "patterns": [{ "include": "#richText" }]
+    },
     "richText": {
       "patterns": [
         {

@@ -7,6 +7,9 @@
       "include": "#fencedCode"
     },
     {
+      "include": "#aside"
+    },
+    {
       "include": "#richText"
     },
     {
@@ -472,6 +475,21 @@
             }
           },
           "contentName": "markup.raw.block.snote"
+        }
+      ]
+    },
+    "aside": {
+      "name": "meta.aside.snote",
+      "begin": "^[ \\t]*(>)(?=[ \\t]|$)",
+      "end": "$",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.aside.snote"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#richText"
         }
       ]
     },

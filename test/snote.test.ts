@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   formatDocument,
+  getAsideCompletion,
+  getAsideLines,
+  getAsideMarkerStart,
   getCodeFenceCompletion,
   getCopyLineRange,
   getDocumentSymbols,
@@ -17,6 +20,61 @@ import {
   removeCommonIndent,
   toggleTodoLine
 } from '../src/snote';
+
+test('asides require a line-start marker followed by whitespace or end of line', () => {
+  assert.equal(getAsideMarkerStart('> question'), 0);
+  assert.equal(getAsideMarkerStart('  >\tquestion'), 2);
+  assert.equal(getAsideMarkerStart('\t>'), 1);
+  for (const line of ['>> nested', '>text', 'body > aside', 'value > 1', '', '  ']) {
+    assert.equal(getAsideMarkerStart(line), undefined, line);
+  }
+  assert.deepEqual(getAsideLines(['> first', '> second', '>', 'body', '>\tlast']), [
+    { line: 0, markerStart: 0, end: 7 },
+    { line: 1, markerStart: 0, end: 8 },
+    { line: 2, markerStart: 0, end: 1 },
+    { line: 4, markerStart: 0, end: 6 }
+  ]);
+});
+
+test('aside ranges respect code fences, visible-line offsets, and long wrapped content', () => {
+  const long = '> ' + 'question '.repeat(100);
+  assert.deepEqual(getAsideLines(['```snote', '> code', '```', long], 10), [
+    { line: 13, markerStart: 0, end: long.length }
+  ]);
+  assert.deepEqual(getAsideLines(['> code', '```', '> still code', '````', '\t> note'], 20, 4), [
+    { line: 24, markerStart: 1, end: 7 }
+  ]);
+  assert.deepEqual(getAsideLines(['```', '> unclosed']), []);
+});
+
+test('aside completion preserves indentation and leaves content and nested markers alone', () => {
+  assert.deepEqual(getAsideCompletion('\t  >'), { start: 0, insertText: '\t  > ' });
+  assert.deepEqual(getAsideCompletion('> '), { start: 0, insertText: '> ' });
+  for (const prefix of ['', ' ', '>>', '>text', '> question', 'body >']) {
+    assert.equal(getAsideCompletion(prefix), undefined);
+  }
+});
+
+test('aside contents do not affect structure, TODOs, or formatting depth', () => {
+  for (const separator of ['\n', '\r\n', '\r']) {
+    const text = ['call outer:', '> call [ ] ignored:', '> ret', '> - [ ] ignored', '>',
+      'call inner:', '> **bold** and `code`', 'ret', '- [ ] real', 'ret'].join(separator);
+    assert.equal(isBalanced(text), true);
+    assert.deepEqual(getDocumentSymbols(text), [
+      { name: 'outer', start: 0, end: 9, children: [{ name: 'inner', start: 5, end: 7, children: [] }] }
+    ]);
+    assert.deepEqual(getFoldingRanges(text), [{ start: 0, end: 8 }, { start: 5, end: 6 }]);
+    assert.deepEqual(getTodoTree(text), [{ kind: 'group', title: 'outer', line: 0, character: 0,
+      children: [{ kind: 'todo', title: 'real', line: 8, character: 0 }] }]);
+    assert.equal(toggleTodoLine('> - [ ] ignored'), undefined);
+    assert.equal(toggleTodoLine('> call [ ] ignored:'), undefined);
+    const formatted = formatDocument(text, { tabSize: 2, insertSpaces: true })!.text;
+    assert.equal(formatted, ['call outer:', '  > call [ ] ignored:', '  > ret', '  > - [ ] ignored', '  >',
+      '  call inner:', '    > **bold** and `code`', '  ret', '  - [ ] real', 'ret'].join('\n'));
+    assert.deepEqual(getRichTextSpans('> **bold** and *italic* and `code`').map((span) => span.kind),
+      ['bold', 'italic', 'inlineCode']);
+  }
+});
 
 test('parseLine identifies call, ret, and other lines', () => {
   assert.equal(parseLine('  call project title:', 0).kind, 'call');

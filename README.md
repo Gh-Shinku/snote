@@ -59,6 +59,37 @@ as tasks without rewriting the file.
 
 ## Rich Text
 
+### Asides
+
+Prefix a line with `> ` to set a question, temporary thought, or extra detail apart
+from the body. Each additional aside line needs its own `>`; a line containing
+only `>` is an empty aside line. A line without the prefix returns to normal text.
+
+```snote
+call CPU and GPU communication:
+  The CPU initiates a data transfer.
+
+  > Can the GPU execute a kernel during the transfer?
+  > Distinguish **synchronous** transfers from `async` transfers.
+  >
+  > Check whether the operations use separate streams.
+
+  Continue the discussion here.
+ret
+```
+
+Asides keep the indentation of their enclosing `call` block. The `>` marker uses
+the theme's link color, with a subtle quote background across the whole line,
+including wrapped text. Inline rich text works as usual. Type `>` at the start
+of a line and accept **aside** to insert `> `. Enter does not repeat the marker.
+
+The marker must be followed by a space, Tab, or end of line. `>> text`, `>text`,
+and `>` within body text are ordinary text. Aside contents do not create call
+blocks, outline entries, or TODOs. Inside code fences, `>` remains code. Asides
+have no independent folding or completion status.
+
+### Inline markers
+
 SNote supports Markdown-style inline markers inside note text:
 
 ```snote

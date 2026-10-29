@@ -40,6 +40,40 @@ const retPattern = /^ret\s*$/;
 const todoPrefixPattern = /^(\s*)(-\s*)$/;
 const todoItemPattern = /^(\s*-\s+)\[([ xX])\](.*)$/;
 
+export function getAsideMarkerStart(line: string): number | undefined {
+  const match = /^([ \t]*)>(?=[ \t]|$)/.exec(line);
+  return match?.[1].length;
+}
+
+export interface AsideLine {
+  readonly line: number;
+  readonly markerStart: number;
+  readonly end: number;
+}
+
+export function getAsideLines(
+  lines: readonly string[],
+  startLine = 0,
+  initialFenceLength = 0
+): AsideLine[] {
+  const asides: AsideLine[] = [];
+  let fenceLength = initialFenceLength;
+  lines.forEach((line, index) => {
+    const nextFenceLength = getCodeFenceLengthAfterLine(line, fenceLength);
+    const markerStart = getAsideMarkerStart(line);
+    if (fenceLength === 0 && nextFenceLength === 0 && markerStart !== undefined) {
+      asides.push({ line: startLine + index, markerStart, end: line.length });
+    }
+    fenceLength = nextFenceLength;
+  });
+  return asides;
+}
+
+export function getAsideCompletion(linePrefix: string): { start: number; insertText: string } | undefined {
+  const match = /^([ \t]*)>[ \t]*$/.exec(linePrefix);
+  return match === null ? undefined : { start: 0, insertText: `${match[1]}> ` };
+}
+
 export interface CallHeader {
   readonly title: string;
   readonly todo?: {

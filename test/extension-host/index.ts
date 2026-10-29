@@ -176,6 +176,54 @@ async function checkCallFolding(): Promise<void> {
   await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
 }
 
+async function checkAsides(): Promise<void> {
+  const document = await vscode.workspace.openTextDocument({ language: 'snote', content: '  >' });
+  const editor = await vscode.window.showTextDocument(document);
+  const completionsAtEnd = async (line: number) => {
+    const result = await vscode.commands.executeCommand<vscode.CompletionList>(
+      'vscode.executeCompletionItemProvider', document.uri, new vscode.Position(line, document.lineAt(line).text.length)
+    );
+    return result?.items ?? [];
+  };
+  try {
+    const item = (await completionsAtEnd(0)).find((candidate) => candidate.label === 'aside');
+    assert.ok(item);
+    assert.equal(item.insertText, '  > ');
+    assert.ok(item.range instanceof vscode.Range);
+    assert.equal(item.range.start.character, 0);
+    editor.selection = new vscode.Selection(item.range.start, item.range.end);
+    await vscode.commands.executeCommand('editor.action.insertSnippet', { snippet: item.insertText });
+    assert.equal(document.getText(), '  > ');
+
+    for (const raw of ['> c', '> -', '> `', '>>', '>text', 'body >', '```\n>']) {
+      await editor.edit((edit) => edit.replace(new vscode.Range(0, 0, document.lineCount - 1,
+        document.lineAt(document.lineCount - 1).text.length), raw));
+      const items = await completionsAtEnd(document.lineCount - 1);
+      assert.ok(!items.some((candidate) => ['aside', 'call block', 'call TODO block', 'TODO item', 'code block']
+        .includes(String(candidate.label))), raw);
+    }
+    await editor.edit((edit) => edit.replace(new vscode.Range(0, 0, 1, document.lineAt(1).text.length), '> *'));
+    assert.ok((await completionsAtEnd(0)).some((candidate) => candidate.label === 'italic'));
+
+    editor.selection = new vscode.Selection(0, 3, 0, 3);
+    await vscode.commands.executeCommand('type', { text: '\n' });
+    assert.equal(document.lineAt(1).text.trim(), '', 'Enter does not continue the aside marker');
+
+    await editor.edit((edit) => edit.replace(new vscode.Range(0, 0, 1, document.lineAt(1).text.length),
+      'call outer:\n> call [ ] ignored:\n> ret\n> - [ ] ignored\nret'));
+    const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+      'vscode.executeDocumentSymbolProvider', document.uri
+    );
+    assert.equal(symbols?.length, 1);
+    assert.equal(symbols[0].children.length, 0);
+    editor.selection = new vscode.Selection(3, 0, 3, 0);
+    await vscode.commands.executeCommand('snote.toggleTodo');
+    assert.equal(document.lineAt(3).text, '> - [ ] ignored');
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+  }
+}
+
 // Run with VS Code's --extensionTestsPath pointing at out/test/extension-host.
 export async function run(): Promise<void> {
   const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote');
@@ -294,6 +342,7 @@ export async function run(): Promise<void> {
     assert.ok(changes > 0, 'provider notifies the contributed view');
     await checkTaskBlocks(provider);
     await checkCallFolding();
+    await checkAsides();
     while (vscode.window.tabGroups.activeTabGroup.activeTab !== undefined) {
       const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
       await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');

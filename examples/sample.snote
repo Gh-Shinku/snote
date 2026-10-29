@@ -1,4 +1,9 @@
 call project:
+    > Can the GPU execute a kernel during a CPU/GPU transfer?
+    > Distinguish **synchronous** transfers from `async` transfers.
+    >
+    Continue the discussion here.
+
     call [ ] Fix login:
         Refresh expired tokens before retrying requests.
         - [ ] Add a regression test
