@@ -184,6 +184,12 @@ npm run compile
 Run parser and highlighting tests with `npm test`. To also run the TODO view
 checks in an isolated Extension Development Host, use PowerShell:
 
+Use the existing VS Code installation on your machine. Do not download additional
+VS Code builds for testing. The project does not maintain a historical-version
+test matrix. Separate user-data and extensions directories isolate test files,
+but do not isolate Windows protocol associations; another VS Code build can
+overwrite the system `vscode://` handler.
+
 ```powershell
 npm run compile
 code --disable-extensions --disable-workspace-trust --user-data-dir "$PWD/.vscode-test/user-data" --extensions-dir "$PWD/.vscode-test/extensions" --extensionDevelopmentPath "$PWD" --extensionTestsPath "$PWD/out/test/extension-host"

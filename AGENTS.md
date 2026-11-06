@@ -12,6 +12,9 @@ The language uses nested `call <title>:` / `ret` pairs for hierarchical notes.
 - Keep VS Code provider wiring in `src/extension.ts`.
 - Run `npm test` before completing changes when TypeScript or language behavior changes.
 - Use `npm run compile` for a quick TypeScript verification.
+- Use only the VS Code installation already installed on the developer's machine for Extension Development Host tests. Do not download or run additional VS Code builds, including builds under `.vscode-test/`.
+- Do not perform historical-version compatibility testing or promise support for older VS Code versions. The required `engines.vscode` manifest field is a runtime requirement, not a reason to download test hosts. Change this policy only when the user explicitly requests it.
+- Keep test user data and extensions in separate directories. This does not isolate Windows protocol associations: launching another VS Code build can overwrite the system `vscode://` handler.
 
 ## Git Delivery
 

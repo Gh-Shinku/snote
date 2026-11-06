@@ -10,7 +10,7 @@
     "url": "https://github.com/Gh-Shinku/snote.git"
   },
   "engines": {
-    "vscode": "^1.92.0"
+    "vscode": "^1.142.0"
   },
   "categories": [
     "Programming Languages"
@@ -126,7 +126,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "@types/vscode": "^1.92.0",
+    "@types/vscode": "1.125.0",
     "@vscode/vsce": "^3.9.2",
     "typescript": "^5.8.2",
     "vscode-oniguruma": "^2.0.1",
