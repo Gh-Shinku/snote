@@ -197,6 +197,10 @@ Create a `.vsix` extension package:
 npm run package
 ```
 
+Packaging runs the `vscode:prepublish` lifecycle to validate generated highlighting
+and compile TypeScript before collecting extension files. Direct `vsce package`
+invocations also run this lifecycle.
+
 This creates a file like:
 
 ```text

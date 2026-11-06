@@ -119,7 +119,8 @@
     "compile": "tsc -p ./",
     "generate:highlight": "node scripts/generate-highlighting.cjs",
     "check:highlight": "node scripts/generate-highlighting.cjs --check",
-    "package": "npm run check:highlight && vsce package",
+    "vscode:prepublish": "npm run check:highlight && npm run compile",
+    "package": "vsce package",
     "watch": "tsc -watch -p ./",
     "test": "npm run check:highlight && npm run compile && node --test out/test/*.test.js"
   },
