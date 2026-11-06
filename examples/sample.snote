@@ -4,9 +4,9 @@ call project:
     >
     Continue the discussion here.
 
-    call [ ] Fix login:
+    call [ ] [P1] Fix login:
         Refresh expired tokens before retrying requests.
-        - [ ] Add a regression test
+        - [ ] [P2] Add a regression test
         call [x] Investigate the cause:
             The refresh logic is missing.
         ret

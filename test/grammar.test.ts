@@ -115,6 +115,21 @@ test('task block highlighting is disabled inside fenced code', async () => {
   assert.ok(!literal.tokens.some((token) => token.scopes.includes('punctuation.definition.todo.unchecked.snote')));
 });
 
+test('priority scopes are confined to a valid task prefix', async () => {
+  const grammar = await loadSnoteGrammar();
+  for (const priority of ['P1', 'P2', 'P3']) {
+    for (const raw of [`- [ ] [${priority}] task`, `- [x] [${priority}] done`, `call [ ] [${priority}] task:`, `call [X] [${priority}] done:`]) {
+      const { tokens } = grammar.tokenizeLine(raw, null);
+      const token = tokens.find((entry) => entry.scopes.includes('meta.todo.priority.snote'));
+      assert.ok(token, raw);
+      assert.equal(raw.slice(token.startIndex, token.endIndex), `[${priority}]`);
+    }
+  }
+  for (const raw of ['- [ ] title [P1]', '- [ ] [P4] literal', '- [ ] [P1]no separator', '> - [ ] [P1] aside', 'call [P1] group:']) {
+    assert.ok(!grammar.tokenizeLine(raw, null).tokens.some((token) => token.scopes.includes('meta.todo.priority.snote')), raw);
+  }
+});
+
 test('fenced code uses the named language grammar and stops at its closing fence', async () => {
   const grammar = await loadSnoteGrammar();
 

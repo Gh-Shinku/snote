@@ -40,6 +40,63 @@ const retPattern = /^ret\s*$/;
 const todoPrefixPattern = /^(\s*)(-\s*)$/;
 const todoItemPattern = /^(\s*-\s+)\[([ xX])\](.*)$/;
 
+export type TodoPriority = 'P1' | 'P2' | 'P3';
+
+function parsePriorityTitle(text: string): { title: string; priority?: TodoPriority } {
+  const match = /^\[(P[123])\](?:[ \t]+|$)/.exec(text);
+  return match === null ? { title: text } : {
+    title: text.slice(match[0].length).trim(), priority: match[1] as TodoPriority
+  };
+}
+
+export function setTodoPriorityLine(raw: string, priority: TodoPriority | undefined): string | undefined {
+  const range = getTodoPriorityRange(raw);
+  if (range === undefined) {
+    return undefined;
+  }
+  const { start, end } = range;
+  if (range.priority === priority) {
+    return raw;
+  }
+  const prefix = raw.slice(0, start);
+  const suffix = raw.slice(end);
+  const marker = priority === undefined ? '' : `${/\s$/.test(prefix) ? '' : ' '}[${priority}] `;
+  return prefix + marker + suffix;
+}
+
+function getTodoPriorityRange(raw: string): { start: number; end: number; checked: boolean; priority?: TodoPriority } | undefined {
+  const match = /^([ \t]*(?:-[ \t]+|call[ \t]+)\[([ xX])\])([ \t]*)(.*)$/.exec(raw);
+  if (match === null || (raw.trimStart().startsWith('call') && parseCallHeader(raw)?.todo === undefined)) {
+    return undefined;
+  }
+  const start = match[1].length + match[3].length;
+  const title = raw.trimStart().startsWith('call') ? raw.slice(start, raw.lastIndexOf(':')).trimEnd() : match[4];
+  const parsed = parsePriorityTitle(title);
+  const priority = match[3].length > 0 && parsed.priority !== undefined
+    && (parsed.title.length > 0 || !raw.trimStart().startsWith('call'))
+    ? parsed.priority : undefined;
+  const length = priority === undefined ? 0 : /^\[P[123]\][ \t]*/.exec(title)![0].length;
+  return { start, end: start + length, checked: match[2] !== ' ', ...(priority ? { priority } : {}) };
+}
+
+export function getTodoPrioritySpans(lines: readonly string[], startLine = 0, initialFenceLength = 0):
+  Array<{ line: number; start: number; end: number; priority: TodoPriority; checked: boolean }> {
+  const spans: Array<{ line: number; start: number; end: number; priority: TodoPriority; checked: boolean }> = [];
+  let fenceLength = initialFenceLength;
+  lines.forEach((raw, index) => {
+    const next = getCodeFenceLengthAfterLine(raw, fenceLength);
+    if (fenceLength === 0 && next === 0) {
+      const range = getTodoPriorityRange(raw);
+      if (range?.priority !== undefined) {
+        spans.push({ line: startLine + index, start: range.start, end: range.start + 4,
+          priority: range.priority, checked: range.checked });
+      }
+    }
+    fenceLength = next;
+  });
+  return spans;
+}
+
 export function getAsideMarkerStart(line: string): number | undefined {
   const match = /^([ \t]*)>(?=[ \t]|$)/.exec(line);
   return match?.[1].length;
@@ -79,6 +136,7 @@ export interface CallHeader {
   readonly todo?: {
     readonly checked: boolean;
     readonly markerStart: number;
+    readonly priority?: TodoPriority;
   };
 }
 
@@ -89,9 +147,13 @@ export function parseCallHeader(raw: string): CallHeader | undefined {
 
   const match = /^(\s*call\s+)(.+):\s*$/.exec(raw)!;
   const task = /^\[([ xX])\]\s+(\S(?:.*\S)?)\s*$/.exec(match[2]);
-  return task === null
-    ? { title: match[2] }
-    : { title: task[2], todo: { checked: task[1] !== ' ', markerStart: match[1].length } };
+  if (task === null) {
+    return { title: match[2] };
+  }
+  const parsed = parsePriorityTitle(task[2]);
+  const priority = parsed.title.length > 0 ? parsed.priority : undefined;
+  return { title: priority === undefined ? task[2] : parsed.title,
+    todo: { checked: task[1] !== ' ', markerStart: match[1].length, ...(priority ? { priority } : {}) } };
 }
 
 export function parseLine(raw: string, index: number): ParsedLine {
@@ -187,6 +249,7 @@ export function toggleTodoLine(raw: string): string | undefined {
 export type TodoTreeNode = TodoGroup | TodoItem;
 
 export interface TodoGroup {
+  readonly priority?: TodoPriority;
   readonly kind: 'group';
   readonly title: string;
   readonly line: number;
@@ -196,6 +259,7 @@ export interface TodoGroup {
 }
 
 export interface TodoItem {
+  readonly priority?: TodoPriority;
   readonly kind: 'todo';
   readonly title: string;
   readonly line: number;
@@ -221,6 +285,7 @@ export function getTodoTree(text: string): TodoTreeNode[] {
       const header = parseCallHeader(line.raw)!;
       const block = {
         title: header.title,
+        ...(header.todo?.priority ? { priority: header.todo.priority } : {}),
         line: line.index,
         character: line.raw.search(/\S/),
         children: []
@@ -237,7 +302,7 @@ export function getTodoTree(text: string): TodoTreeNode[] {
       if (match !== null && match[2] === ' ') {
         children.push({
           kind: 'todo',
-          title: match[3].trim(),
+          ...(/^[ \t]/.test(match[3]) ? parsePriorityTitle(match[3].trim()) : { title: match[3].trim() }),
           line: line.index,
           character: line.raw.search(/\S/)
         });

@@ -75,7 +75,8 @@ async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
   const children = provider.getChildren(parent);
   assert.equal(children.length, 2);
   const completed = children[1];
-  assert.equal(provider.getTreeItem(completed).description, 'Completed');
+  assert.equal(provider.getTreeItem(completed).description, undefined);
+  assert.match(String(provider.getTreeItem(completed).tooltip), /Completed/);
   assert.equal(provider.getTreeItem(completed).command, undefined, 'completed parent is only context');
   assert.equal(provider.getTreeItem(tasks()[1]).collapsibleState, vscode.TreeItemCollapsibleState.None);
   assert.equal(provider.getChildren(project).length, 2, 'task appears once rather than as a duplicate child');
@@ -97,7 +98,7 @@ async function checkTaskBlocks(provider: SnoteTodoTreeProvider): Promise<void> {
 
   editor.selection = new vscode.Selection(1, 0, 1, 0);
   await vscode.commands.executeCommand('snote.toggleTodo');
-  await waitFor(() => provider.getTreeItem(tasks()[0]).description === 'Completed', 'completed parent becomes context');
+  await waitFor(() => tasks()[0].node.kind === 'group', 'completed parent becomes context');
   assert.equal(document.lineAt(1).text, '  call [x] parent:');
   assert.equal(document.lineAt(3).text, '    - [ ] child', 'toggling parent leaves child untouched');
   assert.equal(document.lineAt(4).text, '    call [X] completed parent:', 'toggling parent preserves descendants');
@@ -224,6 +225,64 @@ async function checkAsides(): Promise<void> {
   }
 }
 
+async function checkPriorities(provider: SnoteTodoTreeProvider): Promise<void> {
+  const document = await vscode.workspace.openTextDocument({ language: 'snote', content:
+    'call [ ] parent:\n  - [ ] child\n  - [ ] sibling\nret\n> - [ ] aside\n```snote\n- [ ] code\n```' });
+  const editor = await vscode.window.showTextDocument(document);
+  try {
+    editor.selection = new vscode.Selection(0, 0, 0, 0);
+    for (const priority of [1, 2, 3]) {
+      await vscode.commands.executeCommand(`snote.priority${priority}`);
+      assert.equal(document.lineAt(0).text, `call [ ] [P${priority}] parent:`);
+      await waitFor(() => provider.getChildren()[0]?.node.priority === `P${priority}`, 'priority updates sidebar');
+      const item = provider.getTreeItem(provider.getChildren()[0]);
+      assert.equal(item.label, 'parent');
+      assert.equal(item.description, `P${priority}`);
+      assert.ok(item.iconPath instanceof vscode.ThemeIcon && item.iconPath.color !== undefined);
+      assert.equal(provider.getTreeItem(provider.getChildren(provider.getChildren()[0])[0]).description, undefined);
+    }
+    await vscode.commands.executeCommand('snote.priority0');
+    assert.equal(document.lineAt(0).text, 'call [ ] parent:');
+    await vscode.commands.executeCommand('undo');
+    assert.equal(document.lineAt(0).text, 'call [ ] [P3] parent:');
+
+    editor.selections = [new vscode.Selection(1, 0, 3, 0), new vscode.Selection(2, 0, 2, 0)];
+    await vscode.commands.executeCommand('snote.priority1');
+    assert.equal(document.lineAt(1).text, '  - [ ] [P1] child');
+    assert.equal(document.lineAt(2).text, '  - [ ] [P1] sibling');
+    assert.equal(document.lineAt(3).text, 'ret');
+    editor.selection = new vscode.Selection(1, 0, 1, 0);
+    await vscode.commands.executeCommand('snote.toggleTodo');
+    await waitFor(() => document.lineAt(1).text === '  - [x] [P1] child', 'checkbox toggle preserves priority');
+    assert.equal(document.lineAt(1).text, '  - [x] [P1] child');
+    await vscode.commands.executeCommand('snote.priority2');
+    assert.equal(document.lineAt(1).text, '  - [x] [P2] child');
+    editor.selections = [new vscode.Selection(4, 0, 4, 0), new vscode.Selection(6, 0, 6, 0)];
+    const before = document.getText();
+    await vscode.commands.executeCommand('snote.priority1');
+    assert.equal(document.getText(), before, 'aside and code are untouched');
+
+    const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote')!;
+    for (const priority of [0, 1, 2, 3]) {
+      const command = `snote.priority${priority}`;
+      const binding = extension.packageJSON.contributes.keybindings.find((entry: { command: string }) => entry.command === command);
+      assert.equal(binding.key, `ctrl+alt+${priority}`);
+      assert.match(binding.when, /editorLangId == snote/);
+      assert.ok(!extension.packageJSON.contributes.commands.some((entry: { command: string }) => entry.command === command));
+    }
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+  }
+  const plain = await vscode.workspace.openTextDocument({ language: 'plaintext', content: '- [ ] literal' });
+  await vscode.window.showTextDocument(plain);
+  try {
+    await vscode.commands.executeCommand('snote.priority1');
+    assert.equal(plain.getText(), '- [ ] literal');
+  } finally {
+    await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');
+  }
+}
+
 // Run with VS Code's --extensionTestsPath pointing at out/test/extension-host.
 export async function run(): Promise<void> {
   const extension = vscode.extensions.all.find((candidate) => candidate.packageJSON.name === 'snote');
@@ -247,7 +306,7 @@ export async function run(): Promise<void> {
     const todo = provider.getChildren(inner)[0];
     assert.equal(provider.getTreeItem(outer).collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
     assert.equal(provider.getTreeItem(todo).label, 'first');
-    assert.equal(provider.getTreeItem(todo).description, '3');
+    assert.equal(provider.getTreeItem(todo).description, undefined);
     assert.equal(provider.getTreeItem(provider.getChildren()[1]).label, 'Untitled TODO');
 
     // Focus the real contributed view and use exactly the command assigned to
@@ -343,6 +402,7 @@ export async function run(): Promise<void> {
     await checkTaskBlocks(provider);
     await checkCallFolding();
     await checkAsides();
+    await checkPriorities(provider);
     while (vscode.window.tabGroups.activeTabGroup.activeTab !== undefined) {
       const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
       await vscode.commands.executeCommand('workbench.action.revertAndCloseActiveEditor');

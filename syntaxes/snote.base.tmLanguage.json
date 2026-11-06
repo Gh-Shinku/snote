@@ -115,20 +115,22 @@
       "patterns": [
         {
           "name": "meta.todo.unchecked.snote",
-          "match": "^(\\s*)(-\\s+)(\\[ \\])(.*)$",
+          "match": "^(\\s*)(-\\s+)(\\[ \\])(?:([ \\t]+)(\\[P[123]\\])(?=[ \\t]|$))?(.*)$",
           "captures": {
             "3": {
               "name": "punctuation.definition.todo.unchecked.snote"
-            }
+            },
+            "5": { "name": "meta.todo.priority.snote" }
           }
         },
         {
           "name": "meta.todo.checked.snote",
-          "match": "^(\\s*)(-\\s+)(\\[[xX]\\])(.*)$",
+          "match": "^(\\s*)(-\\s+)(\\[[xX]\\])(?:([ \\t]+)(\\[P[123]\\])(?=[ \\t]|$))?(.*)$",
           "captures": {
             "3": {
               "name": "punctuation.definition.todo.checked.snote"
-            }
+            },
+            "5": { "name": "meta.todo.priority.snote" }
           }
         }
       ]
@@ -137,22 +139,24 @@
       "patterns": [
         {
           "name": "meta.call.todo.unchecked.snote",
-          "match": "^(\\s*)(call)(\\s+)(\\[ \\])(\\s+)(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
+          "match": "^(\\s*)(call)(\\s+)(\\[ \\])(\\s+)(?:(\\[P[123]\\])([ \\t]+))?(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
           "captures": {
             "2": { "name": "keyword.control.call.snote" },
             "4": { "name": "punctuation.definition.todo.unchecked.snote" },
-            "6": { "name": "string.unquoted.title.snote" },
-            "8": { "name": "punctuation.definition.block.snote" }
+            "6": { "name": "meta.todo.priority.snote" },
+            "8": { "name": "string.unquoted.title.snote" },
+            "10": { "name": "punctuation.definition.block.snote" }
           }
         },
         {
           "name": "meta.call.todo.checked.snote",
-          "match": "^(\\s*)(call)(\\s+)(\\[[xX]\\])(\\s+)(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
+          "match": "^(\\s*)(call)(\\s+)(\\[[xX]\\])(\\s+)(?:(\\[P[123]\\])([ \\t]+))?(\\S(?:.*\\S)?)(\\s*)(:)\\s*$",
           "captures": {
             "2": { "name": "keyword.control.call.snote" },
             "4": { "name": "punctuation.definition.todo.checked.snote" },
-            "6": { "name": "string.unquoted.title.snote" },
-            "8": { "name": "punctuation.definition.block.snote" }
+            "6": { "name": "meta.todo.priority.snote" },
+            "8": { "name": "string.unquoted.title.snote" },
+            "10": { "name": "punctuation.definition.block.snote" }
           }
         }
       ]

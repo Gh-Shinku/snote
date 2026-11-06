@@ -44,6 +44,34 @@ as tasks without rewriting the file.
 
 ## Features
 
+### TODO priorities
+
+Place `[P1]`, `[P2]`, or `[P3]` after a task checkbox for high, medium, or low
+priority. Leave it out for an unspecified priority. Both task forms support it:
+
+```snote
+- [ ] [P1] Fix login
+call [ ] [P2] Improve GPU transfers:
+  - [ ] Measure the current overhead
+ret
+```
+
+With a SNote editor focused, use `Ctrl+Alt+1`, `Ctrl+Alt+2`, or `Ctrl+Alt+3` to
+set the priority of the task on the current line. `Ctrl+Alt+0` removes it.
+Selections and multiple cursors apply the shortcut to each covered task line.
+Repeated shortcuts replace the priority rather than adding another marker.
+These shortcuts have no additional Command Palette entry.
+
+The editor renders priority markers as colored badges: red for P1, amber for
+P2, and blue for P3. Completed tasks keep their markers in a subdued color.
+The TODO sidebar shows the title and priority, with a matching task icon color;
+it no longer displays line numbers beside entries. Source locations and completed
+ancestor status remain available in tooltips. Priorities do not change source
+order or propagate to children. Toggling a checkbox preserves the priority.
+Priority-like text in an aside, code fence, or elsewhere in a title stays literal.
+
+### Editor features
+
 - Syntax highlighting for `call`, titles, `:`, and `ret`
 - Folding for matched `call` / `ret` blocks hides the body while keeping both the `call` header and its matching `ret` visible. Empty blocks have no fold control. This also applies to task blocks.
 - Folding for fenced code blocks

@@ -4,6 +4,7 @@ import {
   DocumentSymbol,
   RichTextKind,
   TodoTreeNode,
+  TodoPriority,
   getAsideCompletion,
   getAsideLines,
   getAsideMarkerStart,
@@ -16,13 +17,19 @@ import {
   getRichTextSpansForLines,
   getTodoCompletion,
   getTodoTree,
+  getTodoPrioritySpans,
   removeCommonIndent,
+  setTodoPriorityLine,
   toggleTodoLine
 } from './snote';
 
 const languageSelector: vscode.DocumentSelector = { language: 'snote' };
-type DecorationKind = RichTextKind | 'aside' | 'asideMarker';
-const decorationKinds: DecorationKind[] = ['aside', 'asideMarker', 'bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode'];
+type DecorationKind = RichTextKind | 'aside' | 'asideMarker' | TodoPriority | 'completedPriority';
+const decorationKinds: DecorationKind[] = ['aside', 'asideMarker', 'bold', 'italic', 'boldItalic', 'strikethrough', 'inlineCode',
+  'P1', 'P2', 'P3', 'completedPriority'];
+const priorityColors: Record<TodoPriority, string> = {
+  P1: 'editorError.foreground', P2: 'editorWarning.foreground', P3: 'editorInfo.foreground'
+};
 const richTextRefreshDelayMs = 150;
 
 export function activate(context: vscode.ExtensionContext): { todoView: vscode.TreeView<TodoTreeElement> } {
@@ -55,6 +62,13 @@ export function activate(context: vscode.ExtensionContext): { todoView: vscode.T
     vscode.languages.registerCompletionItemProvider(languageSelector, new SnoteCompletionItemProvider(), 'c', '-', ' ', '*', '~', '`', '>'),
     vscode.languages.registerDocumentSymbolProvider(languageSelector, new SnoteDocumentSymbolProvider()),
     vscode.commands.registerTextEditorCommand('snote.toggleTodo', toggleTodoInEditor),
+    ...([undefined, 'P1', 'P2', 'P3'] as const).map((priority, index) =>
+      vscode.commands.registerCommand(`snote.priority${index}`, async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (editor !== undefined) {
+          await setPriorityInEditor(editor, priority);
+        }
+      })),
     vscode.commands.registerTextEditorCommand('snote.copyWithoutIndentation', copyWithoutIndentation),
     vscode.window.onDidChangeVisibleTextEditors((editors) => richTextDecorationManager.updateEditors(editors)),
     vscode.window.onDidChangeTextEditorVisibleRanges(({ textEditor }) => richTextDecorationManager.updateEditors([textEditor])),
@@ -136,11 +150,17 @@ export class SnoteTodoTreeProvider implements vscode.TreeDataProvider<TodoTreeEl
     );
     item.id = `${uri.toString()}:${node.kind}:${node.line}`;
     item.iconPath = new vscode.ThemeIcon(group ? (node.completed ? 'pass' : 'symbol-namespace') : 'circle-large-outline');
+    item.description = node.priority;
+    if (!group && node.priority !== undefined) {
+      item.iconPath = new vscode.ThemeIcon('circle-large-outline', new vscode.ThemeColor(priorityColors[node.priority]));
+    }
     item.tooltip = `${item.label}\n${uri.fsPath}:${node.line + 1}`;
+    if (node.priority !== undefined) {
+      item.tooltip += `\nPriority: ${node.priority}`;
+    }
     if (group && node.completed) {
-      item.description = 'Completed';
+      item.tooltip += '\nCompleted';
     } else if (!group) {
-      item.description = `${node.line + 1}`;
       item.command = {
         command: 'snote.openTodo',
         title: 'Go to TODO',
@@ -444,6 +464,39 @@ async function toggleTodoInEditor(editor: vscode.TextEditor): Promise<void> {
   }
 }
 
+async function setPriorityInEditor(editor: vscode.TextEditor, priority: TodoPriority | undefined): Promise<void> {
+  if (editor.document.languageId !== 'snote') {
+    return;
+  }
+  const lines = new Set<number>();
+  let lastLine = 0;
+  for (const selection of editor.selections) {
+    const range = getCopyLineRange(selection.start.line, selection.end.line, selection.end.character);
+    lastLine = Math.max(lastLine, range.end);
+    for (let line = range.start; line <= range.end; line += 1) {
+      lines.add(line);
+    }
+  }
+  const edits = new vscode.WorkspaceEdit();
+  let changed = false;
+  let fenceLength = 0;
+  for (let index = 0; index <= lastLine; index += 1) {
+    const line = editor.document.lineAt(index);
+    const next = getCodeFenceLengthAfterLine(line.text, fenceLength);
+    if (lines.has(index) && fenceLength === 0 && next === 0) {
+      const text = setTodoPriorityLine(line.text, priority);
+      if (text !== undefined && text !== line.text) {
+        edits.replace(editor.document.uri, line.range, text);
+        changed = true;
+      }
+    }
+    fenceLength = next;
+  }
+  if (changed) {
+    await vscode.workspace.applyEdit(edits);
+  }
+}
+
 async function copyWithoutIndentation(editor: vscode.TextEditor): Promise<void> {
   const selections = editor.selections.filter((selection) => !selection.isEmpty);
   if (selections.length === 0) {
@@ -536,6 +589,10 @@ class SnoteRichTextDecorationManager {
         ranges.aside.push(new vscode.Range(aside.line, 0, aside.line, aside.end));
         ranges.asideMarker.push(new vscode.Range(aside.line, aside.markerStart, aside.line, aside.markerStart + 1));
       }
+      for (const span of getTodoPrioritySpans(lines, visibleRange.start, fenceLength)) {
+        ranges[span.checked ? 'completedPriority' : span.priority].push(
+          new vscode.Range(span.line, span.start, span.line, span.end));
+      }
 
       for (const line of lines) {
         fenceLength = getCodeFenceLengthAfterLine(line, fenceLength);
@@ -588,7 +645,23 @@ function getVisibleLineRanges(editor: vscode.TextEditor): Array<{ start: number;
 }
 
 function createRichTextDecorationTypes(): RichTextDecorationTypes {
+  const priorityDecoration = (priority: TodoPriority, lightBackground: string, darkBackground: string) =>
+    vscode.window.createTextEditorDecorationType({
+      color: new vscode.ThemeColor(priorityColors[priority]),
+      fontWeight: 'bold',
+      borderRadius: '3px',
+      light: { backgroundColor: lightBackground },
+      dark: { backgroundColor: darkBackground },
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    });
   return {
+    P1: priorityDecoration('P1', '#d1343814', '#f14c4c18'),
+    P2: priorityDecoration('P2', '#99600014', '#cca70018'),
+    P3: priorityDecoration('P3', '#007acc14', '#3794ff18'),
+    completedPriority: vscode.window.createTextEditorDecorationType({
+      color: new vscode.ThemeColor('descriptionForeground'),
+      rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed
+    }),
     aside: vscode.window.createTextEditorDecorationType({
       isWholeLine: true,
       backgroundColor: new vscode.ThemeColor('textBlockQuote.background'),
@@ -628,6 +701,7 @@ function createRichTextDecorationTypes(): RichTextDecorationTypes {
 
 function createRichTextDecorationRanges(): Record<DecorationKind, vscode.Range[]> {
   return {
+    P1: [], P2: [], P3: [], completedPriority: [],
     aside: [],
     asideMarker: [],
     bold: [],

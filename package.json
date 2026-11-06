@@ -38,6 +38,26 @@
     ],
     "keybindings": [
       {
+        "command": "snote.priority1",
+        "key": "ctrl+alt+1",
+        "when": "editorTextFocus && editorLangId == snote"
+      },
+      {
+        "command": "snote.priority2",
+        "key": "ctrl+alt+2",
+        "when": "editorTextFocus && editorLangId == snote"
+      },
+      {
+        "command": "snote.priority3",
+        "key": "ctrl+alt+3",
+        "when": "editorTextFocus && editorLangId == snote"
+      },
+      {
+        "command": "snote.priority0",
+        "key": "ctrl+alt+0",
+        "when": "editorTextFocus && editorLangId == snote"
+      },
+      {
         "command": "snote.toggleTodo",
         "key": "alt+enter",
         "when": "editorTextFocus && editorLangId == snote"

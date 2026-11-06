@@ -20,6 +20,56 @@ import {
   removeCommonIndent,
   toggleTodoLine
 } from '../src/snote';
+import { getTodoPrioritySpans, setTodoPriorityLine } from '../src/snote';
+
+test('priority editing adds, replaces, and removes a marker without changing task state or content', () => {
+  for (const prefix of ['- [ ] ', '\t- [x]\t', '  call [ ] ', 'call [X]\t']) {
+    const suffix = prefix.includes('call') ? 'task: title  :  ' : 'task: title  ';
+    const original = prefix + suffix;
+    const high = prefix + '[P1] ' + suffix;
+    assert.equal(setTodoPriorityLine(original, 'P1'), high);
+    assert.equal(setTodoPriorityLine(high, 'P1'), high);
+    assert.equal(setTodoPriorityLine(high, 'P2'), prefix + '[P2] ' + suffix);
+    assert.equal(setTodoPriorityLine(high, undefined), original);
+    assert.equal(setTodoPriorityLine(original, undefined), original);
+    assert.ok(toggleTodoLine(high)?.includes('[P1]'));
+  }
+  for (const raw of ['body', 'call group:', '> - [ ] task', '- [] task', 'call [ ]:']) {
+    assert.equal(setTodoPriorityLine(raw, 'P1'), undefined);
+  }
+  assert.equal(setTodoPriorityLine('- [ ]', 'P3'), '- [ ] [P3] ');
+  assert.equal(setTodoPriorityLine('- [ ] [P4] literal', 'P1'), '- [ ] [P1] [P4] literal');
+  assert.equal(setTodoPriorityLine('- [ ] [P1] task mentions [P2]', undefined), '- [ ] task mentions [P2]');
+});
+
+test('priority parsing separates the title, does not inherit, and preserves task hierarchy', () => {
+  const text = 'call [ ] [P1] parent:\n- [ ] child\n- [ ] [P2] second\ncall [x] [P3] done:\n- [ ] nested\nret\nret';
+  const roots = getTodoTree(text);
+  assert.equal(roots[0].priority, 'P1');
+  assert.equal(roots[0].title, 'parent');
+  assert.equal(roots[0].children?.[0].priority, undefined);
+  assert.equal(roots[0].children?.[1].priority, 'P2');
+  assert.equal(roots[0].children?.[1].title, 'second');
+  assert.equal(roots[0].children?.[2].priority, 'P3');
+  assert.equal(roots[0].children?.[2].kind, 'group');
+  assert.equal(parseCallHeader('call [ ] [P1]:')?.title, '[P1]');
+  assert.equal(getTodoTree('- [ ] [P4] literal')[0].title, '[P4] literal');
+  assert.equal(getTodoTree('- [ ] [P1]no separator')[0].priority, undefined);
+  assert.equal(getTodoTree('- [ ][P1] literal')[0].priority, undefined);
+  assert.deepEqual(getTodoPrioritySpans(['- [ ][P1] literal']), []);
+});
+
+test('priority rendering covers only task-prefix markers outside code and asides', () => {
+  const lines = ['- [ ] [P1] task [P2]', 'call [X] [P3] done:', '> - [ ] [P1] aside',
+    '```snote', '- [ ] [P2] code', '```', '- [ ] [P2] final'];
+  assert.deepEqual(getTodoPrioritySpans(lines).map(({ line, priority, checked }) => ({ line, priority, checked })), [
+    { line: 0, priority: 'P1', checked: false }, { line: 1, priority: 'P3', checked: true },
+    { line: 6, priority: 'P2', checked: false }
+  ]);
+  assert.deepEqual(getTodoPrioritySpans(['- [ ] [P1] code', '```', '\t- [ ] [P3] visible'], 10, 3), [
+    { line: 12, start: 7, end: 11, priority: 'P3', checked: false }
+  ]);
+});
 
 test('asides require a line-start marker followed by whitespace or end of line', () => {
   assert.equal(getAsideMarkerStart('> question'), 0);
